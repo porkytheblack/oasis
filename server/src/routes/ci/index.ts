@@ -84,7 +84,7 @@ async function resolveAppSlugToId(slug: string): Promise<string | null> {
 }
 
 // Apply app access check with slug resolution
-ciRoutes.use("/:app_slug/*", requireCiAppAccess("app_slug", resolveAppSlugToId));
+ciRoutes.use("/apps/:app_slug/*", requireCiAppAccess("app_slug", resolveAppSlugToId));
 
 /**
  * POST /ci/apps/:app_slug/releases
@@ -180,7 +180,7 @@ ciRoutes.use("/:app_slug/*", requireCiAppAccess("app_slug", resolveAppSlugToId))
  *   }
  * }
  */
-ciRoutes.post("/:app_slug/releases", async (c) => {
+ciRoutes.post("/apps/:app_slug/releases", async (c) => {
   const appSlug = c.req.param("app_slug");
 
   // Validate app slug format

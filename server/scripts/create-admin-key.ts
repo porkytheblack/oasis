@@ -3,7 +3,7 @@
  * Script to create an initial admin API key.
  * Run with: npx tsx scripts/create-admin-key.ts [optional-name]
  */
-
+import "dotenv/config"
 import { db } from "../src/db/index.js";
 import { apiKeys } from "../src/db/schema.js";
 import { ulid } from "ulid";
