@@ -1,0 +1,20 @@
+{
+  "name": "oasis",
+  "version": "1.0.0",
+  "description": "A self-hosted update server for Tauri applications, featuring a Hono backend, PostgreSQL database, Cloudflare R2 storage, and a Next.js admin dashboard.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/porkytheblack/oasis.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/porkytheblack/oasis/issues"
+  },
+  "homepage": "https://github.com/porkytheblack/oasis#readme"
+}
