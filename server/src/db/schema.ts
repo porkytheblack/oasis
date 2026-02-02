@@ -108,6 +108,35 @@ export const apiKeys = pgTable(
 );
 
 /**
+ * Installers table - represents downloadable installer files for first-time users
+ * These are separate from artifacts, which are for in-app updates
+ */
+export const installers = pgTable(
+  "installers",
+  {
+    id: text("id").primaryKey(),
+    releaseId: text("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    filename: text("filename").notNull(),
+    displayName: text("display_name"),
+    r2Key: text("r2_key"),
+    downloadUrl: text("download_url"),
+    fileSize: integer("file_size"),
+    checksum: text("checksum"),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("installers_release_platform_unique").on(table.releaseId, table.platform),
+    index("installers_release_id_idx").on(table.releaseId),
+    index("installers_platform_idx").on(table.platform),
+  ]
+);
+
+/**
  * Download Events table - for tracking download analytics
  */
 export const downloadEvents = pgTable(
@@ -123,6 +152,7 @@ export const downloadEvents = pgTable(
     platform: text("platform").notNull(),
     version: text("version").notNull(),
     ipCountry: text("ip_country"),
+    downloadType: text("download_type").notNull().default("update"),
     downloadedAt: timestamp("downloaded_at", { mode: "date" })
       .notNull()
       .defaultNow(),
@@ -133,6 +163,7 @@ export const downloadEvents = pgTable(
     index("download_events_downloaded_at_idx").on(table.downloadedAt),
     index("download_events_platform_idx").on(table.platform),
     index("download_events_app_platform_idx").on(table.appId, table.platform),
+    index("download_events_download_type_idx").on(table.downloadType),
   ]
 );
 
@@ -143,6 +174,8 @@ export type Release = typeof releases.$inferSelect;
 export type NewRelease = typeof releases.$inferInsert;
 export type Artifact = typeof artifacts.$inferSelect;
 export type NewArtifact = typeof artifacts.$inferInsert;
+export type Installer = typeof installers.$inferSelect;
+export type NewInstaller = typeof installers.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type DownloadEvent = typeof downloadEvents.$inferSelect;

@@ -353,3 +353,151 @@ export function getContentTypeFromFilename(filename: string): string {
 
   return "application/octet-stream";
 }
+
+// =============================================================================
+// Installer Utilities
+// =============================================================================
+
+/**
+ * Valid installer file extensions for uploads.
+ * These are the common installer file types for desktop applications.
+ */
+export const VALID_INSTALLER_EXTENSIONS = [
+  ".dmg",
+  ".pkg",
+  ".exe",
+  ".msi",
+  ".deb",
+  ".rpm",
+  ".AppImage",
+  ".snap",
+] as const;
+
+/**
+ * Validates if a filename has a valid installer extension.
+ * Returns true if the file is a valid installer type.
+ */
+export function isValidInstallerFile(filename: string): boolean {
+  const lowerFilename = filename.toLowerCase();
+  return VALID_INSTALLER_EXTENSIONS.some((ext) =>
+    lowerFilename.endsWith(ext.toLowerCase())
+  );
+}
+
+/**
+ * Gets the appropriate Content-Type for an installer file based on its extension.
+ *
+ * @param filename - The filename to determine Content-Type for
+ * @returns The appropriate MIME type for the installer file
+ */
+export function getInstallerContentType(filename: string): string {
+  if (!filename) {
+    return "application/octet-stream";
+  }
+
+  const ext = filename.toLowerCase().split(".").pop();
+  const contentTypes: Record<string, string> = {
+    dmg: "application/x-apple-diskimage",
+    pkg: "application/x-newton-compatible-pkg",
+    exe: "application/x-msdownload",
+    msi: "application/x-msi",
+    deb: "application/vnd.debian.binary-package",
+    rpm: "application/x-rpm",
+    appimage: "application/x-executable",
+    snap: "application/vnd.snap",
+  };
+
+  return contentTypes[ext || ""] || "application/octet-stream";
+}
+
+/**
+ * Gets a human-readable description of valid installer file types.
+ */
+export function getValidInstallerTypesDescription(): string {
+  return VALID_INSTALLER_EXTENSIONS.join(", ");
+}
+
+/**
+ * Attempts to detect the platform from an installer filename.
+ * Returns the detected platform or null if unable to detect.
+ *
+ * Common patterns:
+ * - "arm64", "aarch64" -> darwin-aarch64 (if dmg/pkg) or linux-aarch64 (if deb/rpm/AppImage)
+ * - "x64", "x86_64", "amd64" -> darwin-x86_64, windows-x86_64, or linux-x86_64
+ * - "universal" -> darwin-universal (macOS only)
+ * - "x86", "i686", "win32" -> windows-x86
+ * - "armv7", "armhf" -> linux-armv7
+ */
+export function detectPlatformFromFilename(filename: string): string | null {
+  const lower = filename.toLowerCase();
+
+  // Determine OS from extension
+  const isMacOS = lower.endsWith(".dmg") || lower.endsWith(".pkg");
+  const isWindows = lower.endsWith(".exe") || lower.endsWith(".msi");
+  const isLinux =
+    lower.endsWith(".deb") ||
+    lower.endsWith(".rpm") ||
+    lower.endsWith(".appimage") ||
+    lower.endsWith(".snap");
+
+  // Check for universal macOS build
+  if (isMacOS && lower.includes("universal")) {
+    return "darwin-universal";
+  }
+
+  // Check for ARM64/AArch64
+  if (lower.includes("arm64") || lower.includes("aarch64")) {
+    if (isMacOS) return "darwin-aarch64";
+    if (isWindows) return "windows-aarch64";
+    if (isLinux) return "linux-aarch64";
+  }
+
+  // Check for x64/x86_64/amd64
+  if (lower.includes("x64") || lower.includes("x86_64") || lower.includes("amd64")) {
+    if (isMacOS) return "darwin-x86_64";
+    if (isWindows) return "windows-x86_64";
+    if (isLinux) return "linux-x86_64";
+  }
+
+  // Check for x86/i686/win32 (32-bit)
+  if (lower.includes("x86") && !lower.includes("x86_64")) {
+    if (isWindows) return "windows-x86";
+  }
+  if (lower.includes("i686") || lower.includes("win32")) {
+    if (isWindows) return "windows-x86";
+  }
+
+  // Check for ARMv7
+  if (lower.includes("armv7") || lower.includes("armhf")) {
+    if (isLinux) return "linux-armv7";
+  }
+
+  // Default based on extension only (common conventions)
+  // macOS apps are often built for Apple Silicon by default now
+  if (isMacOS) return "darwin-aarch64";
+  // Windows is typically 64-bit
+  if (isWindows) return "windows-x86_64";
+  // Linux is typically 64-bit
+  if (isLinux) return "linux-x86_64";
+
+  return null;
+}
+
+/**
+ * Formats an installer platform to a human-readable display name.
+ */
+export function formatInstallerPlatform(platform: string): string {
+  const platformNames: Record<string, string> = {
+    "darwin-aarch64": "macOS (Apple Silicon)",
+    "darwin-x86_64": "macOS (Intel)",
+    "darwin-universal": "macOS (Universal)",
+    "windows-x86_64": "Windows (64-bit)",
+    "windows-x86": "Windows (32-bit)",
+    "windows-aarch64": "Windows (ARM64)",
+    "linux-x86_64": "Linux (64-bit)",
+    "linux-aarch64": "Linux (ARM64)",
+    "linux-armv7": "Linux (ARMv7)",
+  };
+
+  return platformNames[platform.toLowerCase()] || platform;
+}

@@ -318,3 +318,79 @@ export interface ConfirmUploadResponse {
   confirmed: boolean;
   artifact: Artifact;
 }
+
+// =============================================================================
+// Installer Types
+// =============================================================================
+
+/**
+ * Supported platforms for installers.
+ * This is a superset of the artifact platforms, including universal and additional targets.
+ */
+export type InstallerPlatform =
+  | "darwin-aarch64"
+  | "darwin-x86_64"
+  | "darwin-universal"
+  | "windows-x86_64"
+  | "windows-x86"
+  | "windows-aarch64"
+  | "linux-x86_64"
+  | "linux-aarch64"
+  | "linux-armv7";
+
+/**
+ * Installer entity representing a downloadable installer file for a specific platform.
+ * Installers are standalone installation packages (e.g., .dmg, .exe, .msi) that users
+ * can download and run to install the application, separate from the Tauri update mechanism.
+ */
+export interface Installer {
+  id: string;
+  releaseId: string;
+  platform: InstallerPlatform;
+  filename: string;
+  displayName: string | null;
+  r2Key: string | null;
+  downloadUrl: string | null;
+  fileSize: number | null;
+  checksum: string | null;
+  createdAt: string;
+}
+
+/**
+ * Request payload for presigning an installer upload.
+ * Used to generate a presigned URL for direct upload to R2 storage.
+ */
+export interface PresignInstallerRequest {
+  platform: InstallerPlatform;
+  filename: string;
+  contentType: string;
+  fileSize: number;
+  displayName?: string;
+  replaceExisting?: boolean;
+}
+
+/**
+ * Response from the presign installer endpoint.
+ * Contains the presigned URL and installer metadata.
+ */
+export interface PresignInstallerResponse {
+  presignedUrl: string;
+  r2Key: string;
+  installerId: string;
+}
+
+/**
+ * Request payload for confirming an installer upload.
+ * Called after successfully uploading to the presigned URL.
+ */
+export interface ConfirmInstallerUploadRequest {
+  checksum?: string;
+}
+
+/**
+ * Response from the confirm installer upload endpoint.
+ * Contains the confirmed installer details.
+ */
+export interface ConfirmInstallerUploadResponse {
+  installer: Installer;
+}

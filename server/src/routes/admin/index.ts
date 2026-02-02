@@ -3,6 +3,7 @@ import { appsRoutes } from "./apps.js";
 import { apiKeysRoutes } from "./api-keys.js";
 import { releasesRoutes } from "./releases.js";
 import { artifactsRoutes } from "./artifacts.js";
+import { installersRoutes } from "./installers.js";
 import { analyticsRoutes } from "./analytics.js";
 import { authMiddleware, requireAdminScope, type AuthVariables } from "../../middleware/auth.js";
 import { adminRateLimiter } from "../../middleware/rate-limit.js";
@@ -54,3 +55,8 @@ adminRoutes.route("/apps", releasesRoutes);
 // Admin keys can access all apps, CI keys can only access their assigned app
 // The requireAppAccess middleware is applied within artifactsRoutes
 adminRoutes.route("/apps", artifactsRoutes);
+
+// Installer routes - respects app-scoped keys
+// Admin keys can access all apps, CI keys can only access their assigned app
+// The requireAppAccess middleware is applied within installersRoutes
+adminRoutes.route("/apps", installersRoutes);

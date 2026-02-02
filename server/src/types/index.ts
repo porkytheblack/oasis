@@ -20,6 +20,26 @@ export const PLATFORMS = [
 export type Platform = (typeof PLATFORMS)[number];
 
 /**
+ * Supported installer platforms
+ * Superset of artifact platforms - allows additional formats like universal binaries
+ */
+export const INSTALLER_PLATFORMS = [
+  // Standard platforms (same as artifacts)
+  "darwin-aarch64",
+  "darwin-x86_64",
+  "linux-x86_64",
+  "linux-aarch64",
+  "windows-x86_64",
+  "windows-aarch64",
+  // Additional installer-specific platforms
+  "darwin-universal", // Universal binary for macOS (Intel + Apple Silicon)
+  "windows-x86",      // 32-bit Windows
+  "linux-armv7",      // 32-bit ARM Linux
+] as const;
+
+export type InstallerPlatform = (typeof INSTALLER_PLATFORMS)[number];
+
+/**
  * Release lifecycle statuses
  */
 export const RELEASE_STATUSES = ["draft", "published", "archived"] as const;
@@ -256,6 +276,104 @@ export interface ArtifactDto {
 }
 
 // ============================================================================
+// Installer Types and Schemas
+// ============================================================================
+
+/**
+ * Installer platform validation schema
+ */
+export const installerPlatformSchema = z.enum(INSTALLER_PLATFORMS);
+
+/**
+ * Installer response DTO
+ */
+export interface InstallerDto {
+  id: string;
+  releaseId: string;
+  platform: InstallerPlatform;
+  filename: string;
+  displayName: string | null;
+  r2Key: string | null;
+  downloadUrl: string | null;
+  fileSize: number | null;
+  checksum: string | null;
+  createdAt: string;
+}
+
+/**
+ * Create installer request schema (with direct URL)
+ */
+export const createInstallerSchema = z.object({
+  platform: installerPlatformSchema,
+  filename: z
+    .string()
+    .min(1, "Filename is required")
+    .max(255, "Filename must be at most 255 characters")
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      "Filename can only contain letters, numbers, dots, underscores, and hyphens"
+    ),
+  displayName: z
+    .string()
+    .max(100, "Display name must be at most 100 characters")
+    .optional(),
+  downloadUrl: z.string().url("Download URL must be a valid URL").optional(),
+  fileSize: z.number().int().positive("File size must be a positive integer").optional(),
+  checksum: z.string().optional(),
+});
+
+export type CreateInstallerDto = z.infer<typeof createInstallerSchema>;
+
+/**
+ * Request schema for generating a presigned upload URL for an installer.
+ */
+export const presignInstallerSchema = z.object({
+  platform: installerPlatformSchema,
+  filename: z
+    .string()
+    .min(1, "Filename is required")
+    .max(255, "Filename must be at most 255 characters")
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      "Filename can only contain letters, numbers, dots, underscores, and hyphens"
+    ),
+  displayName: z
+    .string()
+    .max(100, "Display name must be at most 100 characters")
+    .optional(),
+  contentType: z.string().optional(),
+  replaceExisting: z.boolean().optional().default(false),
+});
+
+export type PresignInstallerDto = z.infer<typeof presignInstallerSchema>;
+
+/**
+ * Response returned when generating a presigned upload URL for an installer.
+ */
+export interface PresignInstallerResponse {
+  presignedUrl: string;
+  r2Key: string;
+  installerId: string;
+}
+
+/**
+ * Request schema for confirming an installer upload.
+ */
+export const confirmInstallerUploadSchema = z.object({
+  checksum: z.string().optional(),
+});
+
+export type ConfirmInstallerUploadDto = z.infer<typeof confirmInstallerUploadSchema>;
+
+/**
+ * Response returned when confirming an installer upload.
+ */
+export interface ConfirmInstallerUploadResponse {
+  confirmed: boolean;
+  installer: InstallerDto;
+}
+
+// ============================================================================
 // Tauri Update Response
 // ============================================================================
 
@@ -442,6 +560,39 @@ export const ciArtifactInputSchema = z.object({
 });
 
 /**
+ * Single installer input for CI release creation.
+ *
+ * Represents an installer that has already been uploaded to R2.
+ */
+export interface CiInstallerInput {
+  /** Target platform for this installer */
+  platform: InstallerPlatform;
+  /** Filename of the installer (e.g., "MyApp-1.2.0.dmg") */
+  filename: string;
+  /** Optional friendly display name */
+  display_name?: string;
+  /** The R2 key where the installer was uploaded */
+  r2_key: string;
+}
+
+/**
+ * Zod schema for validating CI installer input.
+ */
+export const ciInstallerInputSchema = z.object({
+  platform: installerPlatformSchema,
+  filename: z
+    .string()
+    .min(1, "Filename is required")
+    .max(255, "Filename must be at most 255 characters")
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      "Filename can only contain letters, numbers, dots, underscores, and hyphens"
+    ),
+  display_name: z.string().max(100, "Display name must be at most 100 characters").optional(),
+  r2_key: z.string().min(1, "R2 key is required"),
+});
+
+/**
  * Request schema for CI release creation.
  *
  * This is a convenience endpoint that creates a release AND registers
@@ -455,6 +606,8 @@ export const ciReleaseSchema = z.object({
   notes: z.string().max(10000, "Notes must be at most 10000 characters").optional(),
   /** Array of artifact definitions */
   artifacts: z.array(ciArtifactInputSchema).min(1, "At least one artifact is required"),
+  /** Optional array of installer definitions */
+  installers: z.array(ciInstallerInputSchema).optional(),
   /** If true, publishes the release immediately after creation */
   auto_publish: z.boolean().optional().default(false),
 });
@@ -468,6 +621,20 @@ export interface CiReleaseArtifact {
   id: string;
   platform: Platform;
   signature: string;
+  r2Key: string;
+  downloadUrl: string | null;
+  fileSize: number | null;
+  createdAt: string;
+}
+
+/**
+ * Installer in CI release response format.
+ */
+export interface CiReleaseInstaller {
+  id: string;
+  platform: InstallerPlatform;
+  filename: string;
+  displayName: string | null;
   r2Key: string;
   downloadUrl: string | null;
   fileSize: number | null;
@@ -491,6 +658,8 @@ export interface CiReleaseResponse {
   };
   /** The created artifact records */
   artifacts: CiReleaseArtifact[];
+  /** The created installer records (if any) */
+  installers?: CiReleaseInstaller[];
 }
 
 // ============================================================================

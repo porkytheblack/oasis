@@ -194,6 +194,33 @@ export function buildR2Key(
 }
 
 /**
+ * Builds a consistent R2 key path for installer storage.
+ *
+ * Key format: `{appSlug}/installers/{version}/{filename}`
+ *
+ * @param appSlug - The application slug (e.g., "my-app")
+ * @param version - The release version (e.g., "1.2.0")
+ * @param filename - The installer filename (e.g., "MyApp-1.2.0.dmg")
+ * @returns The constructed R2 key path
+ *
+ * @example
+ * buildInstallerR2Key("my-app", "1.2.0", "MyApp-1.2.0.dmg")
+ * // Returns: "my-app/installers/1.2.0/MyApp-1.2.0.dmg"
+ */
+export function buildInstallerR2Key(
+  appSlug: string,
+  version: string,
+  filename: string
+): string {
+  // Sanitize inputs to prevent directory traversal and ensure valid paths
+  const sanitizedSlug = appSlug.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const sanitizedVersion = version.replace(/[^a-z0-9.-]/gi, "-");
+  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "-");
+
+  return `${sanitizedSlug}/installers/${sanitizedVersion}/${sanitizedFilename}`;
+}
+
+/**
  * Uploads a buffer directly to R2.
  *
  * @param key - The R2 object key (path)

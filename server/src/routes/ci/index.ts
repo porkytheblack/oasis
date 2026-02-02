@@ -37,7 +37,7 @@ import {
   AppNotFoundForReleaseError,
   ReleaseStatusError,
 } from "../../services/release.service.js";
-import { db, artifacts } from "../../db/index.js";
+import { db, artifacts, installers } from "../../db/index.js";
 import { ulid } from "ulid";
 import {
   fileExists,
@@ -47,6 +47,10 @@ import {
   isR2Configured,
   R2Error,
 } from "../../services/r2.service.js";
+import type {
+  CiReleaseInstaller,
+  InstallerPlatform,
+} from "../../types/index.js";
 
 /**
  * CI routes for GitHub Actions and other CI/CD pipelines.
@@ -219,7 +223,7 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
     return zodValidationError(c, parseResult.error);
   }
 
-  const { version, notes, artifacts: artifactInputs, auto_publish } = parseResult.data;
+  const { version, notes, artifacts: artifactInputs, installers: installerInputs, auto_publish } = parseResult.data;
 
   // Look up the app by slug
   let app;
@@ -243,6 +247,20 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
       );
     }
     platformSet.add(artifact.platform);
+  }
+
+  // Check for duplicate platforms in installer input
+  if (installerInputs && installerInputs.length > 0) {
+    const installerPlatformSet = new Set<string>();
+    for (const installer of installerInputs) {
+      if (installerPlatformSet.has(installer.platform)) {
+        return validationError(
+          c,
+          `Duplicate platform '${installer.platform}' in installers array`
+        );
+      }
+      installerPlatformSet.add(installer.platform);
+    }
   }
 
   // Verify each artifact exists in R2 and collect file info
@@ -270,6 +288,36 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
         );
       }
       throw error;
+    }
+  }
+
+  // Verify each installer exists in R2 and collect file info
+  const installerFileInfo: Map<string, { size: number }> = new Map();
+
+  if (installerInputs && installerInputs.length > 0) {
+    for (const installer of installerInputs) {
+      try {
+        const exists = await fileExists(installer.r2_key);
+        if (!exists) {
+          return validationError(
+            c,
+            `Installer file not found in R2 at '${installer.r2_key}'`
+          );
+        }
+
+        // Get file info for later
+        const fileInfo = await getFileInfo(installer.r2_key);
+        installerFileInfo.set(installer.r2_key, { size: fileInfo.size });
+      } catch (error) {
+        if (error instanceof R2Error) {
+          console.error("R2 error verifying installer:", error);
+          return validationError(
+            c,
+            `Failed to verify installer in R2: ${installer.r2_key}`
+          );
+        }
+        throw error;
+      }
     }
   }
 
@@ -365,6 +413,77 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
     }
   }
 
+  // Create installer records for each installer (if provided)
+  const createdInstallers: CiReleaseInstaller[] = [];
+
+  if (installerInputs && installerInputs.length > 0) {
+    for (const installerInput of installerInputs) {
+      const fileInfo = installerFileInfo.get(installerInput.r2_key);
+      const fileSize = fileInfo?.size ?? null;
+
+      // Generate download URL - use public URL if available, otherwise generate presigned URL
+      let downloadUrl: string | null = null;
+      try {
+        const publicUrl = getPublicUrl(installerInput.r2_key);
+        if (publicUrl) {
+          downloadUrl = publicUrl;
+        } else {
+          // Generate a long-lived presigned URL (7 days)
+          downloadUrl = await generatePresignedDownloadUrl(installerInput.r2_key, 604800);
+        }
+      } catch (error) {
+        console.error("Error generating download URL for installer:", error);
+        // Continue without download URL - it can be set later
+      }
+
+      const installerId = ulid();
+
+      // Insert installer directly into database
+      try {
+        await db.insert(installers).values({
+          id: installerId,
+          releaseId: release.id,
+          platform: installerInput.platform,
+          filename: installerInput.filename,
+          displayName: installerInput.display_name ?? null,
+          r2Key: installerInput.r2_key,
+          downloadUrl,
+          fileSize,
+          checksum: null,
+          createdAt: now,
+        });
+
+        createdInstallers.push({
+          id: installerId,
+          platform: installerInput.platform as InstallerPlatform,
+          filename: installerInput.filename,
+          displayName: installerInput.display_name ?? null,
+          r2Key: installerInput.r2_key,
+          downloadUrl,
+          fileSize,
+          createdAt: now.toISOString(),
+        });
+      } catch (error) {
+        // If installer creation fails, log and continue (artifacts are more critical)
+        // We don't want to fail the entire release creation just because an installer failed
+        console.error("Error creating installer:", error);
+
+        // Check if it was a platform conflict (race condition)
+        if (
+          error instanceof Error &&
+          error.message.includes("UNIQUE constraint failed")
+        ) {
+          return conflict(
+            c,
+            `An installer for platform '${installerInput.platform}' already exists for this release`
+          );
+        }
+
+        return internalError(c, "Failed to create installer record");
+      }
+    }
+  }
+
   // If auto_publish is true, publish the release
   if (auto_publish) {
     try {
@@ -382,6 +501,7 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
           updatedAt: publishedRelease.updatedAt,
         },
         artifacts: createdArtifacts,
+        ...(createdInstallers.length > 0 && { installers: createdInstallers }),
       };
 
       return created(c, response);
@@ -398,7 +518,7 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
     }
   }
 
-  // Return the created release and artifacts
+  // Return the created release, artifacts, and installers
   const response: CiReleaseResponse = {
     release: {
       id: release.id,
@@ -411,6 +531,7 @@ ciRoutes.post("/apps/:app_slug/releases", async (c) => {
       updatedAt: release.updatedAt,
     },
     artifacts: createdArtifacts,
+    ...(createdInstallers.length > 0 && { installers: createdInstallers }),
   };
 
   return created(c, response);

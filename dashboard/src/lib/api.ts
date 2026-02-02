@@ -19,6 +19,11 @@ import type {
   PresignArtifactResponse,
   ConfirmUploadRequest,
   ConfirmUploadResponse,
+  Installer,
+  PresignInstallerRequest,
+  PresignInstallerResponse,
+  ConfirmInstallerUploadRequest,
+  ConfirmInstallerUploadResponse,
 } from "./types";
 import { getDefaultApiUrlRuntime } from "./config";
 
@@ -464,6 +469,72 @@ export async function deleteArtifact(
 ): Promise<void> {
   await apiClient.delete(
     `/admin/apps/${appId}/releases/${releaseId}/artifacts/${artifactId}`
+  );
+}
+
+// =============================================================================
+// Installers API
+// =============================================================================
+
+/**
+ * Fetches all installers for a release.
+ */
+export async function getInstallers(
+  appId: string,
+  releaseId: string
+): Promise<Installer[]> {
+  const response = await apiClient.get<{ success: boolean; data: Installer[] }>(
+    `/admin/apps/${appId}/releases/${releaseId}/installers`
+  );
+  return extractData(response);
+}
+
+/**
+ * Generates a presigned URL for uploading an installer directly to R2 storage.
+ * This is the first step of the upload flow:
+ * 1. Call presignInstallerUpload() to get the presigned URL
+ * 2. Upload the file directly to R2 using uploadToPresignedUrl()
+ * 3. Call confirmInstallerUpload() to verify and activate the installer
+ */
+export async function presignInstallerUpload(
+  appId: string,
+  releaseId: string,
+  data: PresignInstallerRequest
+): Promise<PresignInstallerResponse> {
+  const response = await apiClient.post<{ success: boolean; data: PresignInstallerResponse }>(
+    `/admin/apps/${appId}/releases/${releaseId}/installers/presign`,
+    data
+  );
+  return extractData(response);
+}
+
+/**
+ * Confirms that an installer has been uploaded to R2 and activates it.
+ * This should be called after successfully uploading the file to the presigned URL.
+ */
+export async function confirmInstallerUpload(
+  appId: string,
+  releaseId: string,
+  installerId: string,
+  data?: ConfirmInstallerUploadRequest
+): Promise<ConfirmInstallerUploadResponse> {
+  const response = await apiClient.post<{ success: boolean; data: ConfirmInstallerUploadResponse }>(
+    `/admin/apps/${appId}/releases/${releaseId}/installers/${installerId}/confirm`,
+    data || {}
+  );
+  return extractData(response);
+}
+
+/**
+ * Deletes an installer.
+ */
+export async function deleteInstaller(
+  appId: string,
+  releaseId: string,
+  installerId: string
+): Promise<void> {
+  await apiClient.delete(
+    `/admin/apps/${appId}/releases/${releaseId}/installers/${installerId}`
   );
 }
 

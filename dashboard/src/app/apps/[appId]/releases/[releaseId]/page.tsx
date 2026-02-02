@@ -11,13 +11,23 @@ import {
   uploadToPresignedUrl,
   confirmArtifactUpload,
   deleteArtifact,
+  getInstallers,
+  presignInstallerUpload,
+  confirmInstallerUpload,
+  deleteInstaller,
   publishRelease,
   archiveRelease,
   updateRelease,
   computeFileHash,
   getErrorMessage,
 } from "@/lib/api";
-import type { Artifact, PresignArtifactRequest } from "@/lib/types";
+import type {
+  Artifact,
+  PresignArtifactRequest,
+  Installer,
+  PresignInstallerRequest,
+  InstallerPlatform,
+} from "@/lib/types";
 import { Page } from "@/components/header";
 import {
   Button,
@@ -55,6 +65,7 @@ import {
   ChevronUp,
   ShieldCheck,
   FileSignature,
+  Download,
 } from "lucide-react";
 import {
   formatFileSize,
@@ -67,11 +78,25 @@ import {
   getValidArtifactTypesDescription,
   sanitizeFilename,
   getContentTypeFromFilename,
+  isValidInstallerFile,
+  getValidInstallerTypesDescription,
+  getInstallerContentType,
+  detectPlatformFromFilename,
+  formatInstallerPlatform,
 } from "@/lib/utils";
 
 interface UploadState {
   file: File;
   platform: string;
+  progress: number;
+  status: "pending" | "hashing" | "uploading" | "complete" | "error";
+  error?: string;
+}
+
+interface InstallerUploadState {
+  file: File;
+  platform: InstallerPlatform;
+  displayName: string | null;
   progress: number;
   status: "pending" | "hashing" | "uploading" | "complete" | "error";
   error?: string;
@@ -96,6 +121,14 @@ export default function ReleaseDetailPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const sigFileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Installer upload state
+  const [isInstallerUploadModalOpen, setIsInstallerUploadModalOpen] = React.useState(false);
+  const [installerUploads, setInstallerUploads] = React.useState<InstallerUploadState[]>([]);
+  const [selectedInstallerPlatform, setSelectedInstallerPlatform] = React.useState<InstallerPlatform>("darwin-aarch64");
+  const [installerDisplayName, setInstallerDisplayName] = React.useState("");
+  const [installerReplaceExisting, setInstallerReplaceExisting] = React.useState(false);
+  const installerFileInputRef = React.useRef<HTMLInputElement>(null);
+
   const { data: app, isLoading: appLoading } = useQuery({
     queryKey: ["app", appId],
     queryFn: () => getApp(appId),
@@ -109,6 +142,11 @@ export default function ReleaseDetailPage() {
   const { data: artifacts = [], isLoading: artifactsLoading } = useQuery({
     queryKey: ["artifacts", appId, releaseId],
     queryFn: () => getArtifacts(appId, releaseId),
+  });
+
+  const { data: installers = [], isLoading: installersLoading } = useQuery({
+    queryKey: ["installers", appId, releaseId],
+    queryFn: () => getInstallers(appId, releaseId),
   });
 
   const updateMutation = useMutation({
@@ -156,6 +194,17 @@ export default function ReleaseDetailPage() {
     },
     onError: (err) => {
       toast.error("Failed to delete artifact", getErrorMessage(err));
+    },
+  });
+
+  const deleteInstallerMutation = useMutation({
+    mutationFn: (installerId: string) => deleteInstaller(appId, releaseId, installerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["installers", appId, releaseId] });
+      toast.success("Installer deleted", "The installer has been removed.");
+    },
+    onError: (err) => {
+      toast.error("Failed to delete installer", getErrorMessage(err));
     },
   });
 
@@ -231,6 +280,191 @@ export default function ReleaseDetailPage() {
     setSignature("");
     setIsSignatureSectionOpen(false);
     setReplaceExisting(false);
+  };
+
+  /**
+   * Resets the installer upload modal state when closing.
+   */
+  const handleCloseInstallerUploadModal = () => {
+    setIsInstallerUploadModalOpen(false);
+    setInstallerDisplayName("");
+    setInstallerReplaceExisting(false);
+  };
+
+  /**
+   * Handles installer file selection and initiates the upload process.
+   */
+  const handleInstallerFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Validate file type
+    if (!isValidInstallerFile(file.name)) {
+      toast.error(
+        "Invalid file type",
+        `Please select a valid installer file. Supported types: ${getValidInstallerTypesDescription()}`
+      );
+      if (installerFileInputRef.current) {
+        installerFileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    // Capture current state values before async operations
+    const currentPlatform = selectedInstallerPlatform;
+    const currentDisplayName = installerDisplayName.trim() || null;
+    const currentReplaceExisting = installerReplaceExisting;
+
+    // Sanitize filename to comply with server requirements
+    const sanitizedFilename = sanitizeFilename(file.name);
+
+    // Determine content type from filename
+    const contentType = getInstallerContentType(file.name);
+
+    const newUpload: InstallerUploadState = {
+      file,
+      platform: currentPlatform,
+      displayName: currentDisplayName,
+      progress: 0,
+      status: "pending",
+    };
+
+    // Add upload to the list first for visual feedback
+    setInstallerUploads((prev) => [...prev, newUpload]);
+
+    // Keep modal open briefly to show upload has started, then close and reset state
+    setTimeout(() => {
+      setIsInstallerUploadModalOpen(false);
+      // Reset modal state for next upload
+      setInstallerReplaceExisting(false);
+      setInstallerDisplayName("");
+    }, 500);
+
+    try {
+      // Update status to hashing
+      setInstallerUploads((prev) =>
+        prev.map((u) =>
+          u.file === file ? { ...u, status: "hashing" as const } : u
+        )
+      );
+
+      // Compute file hash for later confirmation
+      const sha256 = await computeFileHash(file);
+
+      // Step 1: Get presigned URL for upload
+      const presignData: PresignInstallerRequest = {
+        platform: currentPlatform,
+        filename: sanitizedFilename,
+        contentType,
+        fileSize: file.size,
+        displayName: currentDisplayName || undefined,
+        replaceExisting: currentReplaceExisting,
+      };
+
+      let presignedResponse;
+      try {
+        presignedResponse = await presignInstallerUpload(appId, releaseId, presignData);
+      } catch (presignError) {
+        // Check for R2 configuration errors and provide helpful message
+        const errorMessage = getErrorMessage(presignError);
+        if (
+          errorMessage.toLowerCase().includes("r2") ||
+          errorMessage.toLowerCase().includes("storage") ||
+          errorMessage.toLowerCase().includes("not configured") ||
+          errorMessage.toLowerCase().includes("presign")
+        ) {
+          throw new Error(
+            "Cloud storage (R2) is not configured on the server. " +
+            "Please configure R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, " +
+            "and R2_BUCKET_NAME environment variables on the server."
+          );
+        }
+        // Check for platform conflict error and provide helpful message
+        if (errorMessage.toLowerCase().includes("already exists")) {
+          throw new Error(
+            `An installer for platform '${formatInstallerPlatform(currentPlatform)}' already exists. ` +
+            "Enable 'Replace existing installer' option to overwrite it."
+          );
+        }
+        throw presignError;
+      }
+
+      // Update status to uploading
+      setInstallerUploads((prev) =>
+        prev.map((u) =>
+          u.file === file ? { ...u, status: "uploading" as const } : u
+        )
+      );
+
+      // Step 2: Upload file directly to R2 using presigned URL
+      await uploadToPresignedUrl(
+        presignedResponse.presignedUrl,
+        file,
+        contentType,
+        (progress) => {
+          setInstallerUploads((prev) =>
+            prev.map((u) => (u.file === file ? { ...u, progress } : u))
+          );
+        }
+      );
+
+      // Step 3: Confirm the upload with the server
+      await confirmInstallerUpload(appId, releaseId, presignedResponse.installerId, {
+        checksum: `sha256:${sha256}`,
+      });
+
+      // Mark as complete
+      setInstallerUploads((prev) =>
+        prev.map((u) =>
+          u.file === file ? { ...u, status: "complete" as const, progress: 100 } : u
+        )
+      );
+
+      // Refresh installers list
+      queryClient.invalidateQueries({ queryKey: ["installers", appId, releaseId] });
+      toast.success("Upload complete", `${file.name} has been uploaded.`);
+
+      // Clear completed upload after delay
+      setTimeout(() => {
+        setInstallerUploads((prev) => prev.filter((u) => u.file !== file));
+      }, 3000);
+    } catch (err) {
+      setInstallerUploads((prev) =>
+        prev.map((u) =>
+          u.file === file
+            ? { ...u, status: "error" as const, error: getErrorMessage(err) }
+            : u
+        )
+      );
+      toast.error("Upload failed", getErrorMessage(err));
+    }
+
+    // Reset file input
+    if (installerFileInputRef.current) {
+      installerFileInputRef.current.value = "";
+    }
+  };
+
+  /**
+   * Handles installer file selection from the file input.
+   * Detects platform from filename if possible and updates the selection.
+   */
+  const handleInstallerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Try to detect platform from filename
+    const detectedPlatform = detectPlatformFromFilename(file.name);
+    if (detectedPlatform) {
+      setSelectedInstallerPlatform(detectedPlatform as InstallerPlatform);
+    }
+
+    // Now proceed with the actual upload
+    handleInstallerFileSelect(e);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -593,14 +827,24 @@ export default function ReleaseDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {release.status === "draft" && (
-              <Button
-                className="w-full justify-start"
-                variant="outline"
-                onClick={() => setIsUploadModalOpen(true)}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Artifact
-              </Button>
+              <>
+                <Button
+                  className="w-full justify-start"
+                  variant="outline"
+                  onClick={() => setIsUploadModalOpen(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Artifact
+                </Button>
+                <Button
+                  className="w-full justify-start"
+                  variant="outline"
+                  onClick={() => setIsInstallerUploadModalOpen(true)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Upload Installer
+                </Button>
+              </>
             )}
             <Button
               className="w-full justify-start"
@@ -615,7 +859,7 @@ export default function ReleaseDetailPage() {
       </div>
 
       {/* Artifacts List */}
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -663,6 +907,103 @@ export default function ReleaseDetailPage() {
                   canDelete={release.status === "draft"}
                   onDelete={() => deleteArtifactMutation.mutate(artifact.id)}
                   isDeleting={deleteArtifactMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Installer Upload Progress */}
+      {installerUploads.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {installerUploads.map((upload, index) => (
+            <Card key={index}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <Download className="h-5 w-5 text-[hsl(var(--primary))]" />
+                    <div>
+                      <p className="font-medium text-[hsl(var(--foreground))]">
+                        {upload.file.name}
+                      </p>
+                      <p className="text-xs text-[hsl(var(--foreground-muted))]">
+                        {upload.status === "hashing" && "Computing file hash..."}
+                        {upload.status === "uploading" && `Uploading installer... ${upload.progress}%`}
+                        {upload.status === "complete" && "Upload complete"}
+                        {upload.status === "error" && upload.error}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-md bg-[hsl(var(--muted))] text-[hsl(var(--foreground-muted))]">
+                    {formatInstallerPlatform(upload.platform)}
+                  </span>
+                </div>
+                {(upload.status === "hashing" || upload.status === "uploading") && (
+                  <div className="w-full h-2 bg-[hsl(var(--muted))] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[hsl(var(--primary))] transition-all duration-300"
+                      style={{
+                        width: upload.status === "hashing" ? "10%" : `${upload.progress}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Installers List */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-[hsl(var(--primary))]" />
+                Installers
+              </CardTitle>
+              <CardDescription>
+                Downloadable installation packages for end users
+              </CardDescription>
+            </div>
+            {release.status === "draft" && (
+              <Button onClick={() => setIsInstallerUploadModalOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {installersLoading ? (
+            <div className="py-8 text-center text-[hsl(var(--foreground-muted))]">
+              Loading installers...
+            </div>
+          ) : installers.length === 0 ? (
+            <EmptyState
+              icon={Download}
+              title="No installers yet"
+              description="Upload installer packages (.dmg, .exe, .msi, etc.) for users to download."
+              action={
+                release.status === "draft" ? (
+                  <Button onClick={() => setIsInstallerUploadModalOpen(true)}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Installer
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {installers.map((installer) => (
+                <InstallerRow
+                  key={installer.id}
+                  installer={installer}
+                  canDelete={release.status === "draft"}
+                  onDelete={() => deleteInstallerMutation.mutate(installer.id)}
+                  isDeleting={deleteInstallerMutation.isPending}
                 />
               ))}
             </div>
@@ -879,6 +1220,144 @@ export default function ReleaseDetailPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Installer Upload Modal */}
+      <Modal open={isInstallerUploadModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseInstallerUploadModal();
+        } else {
+          setIsInstallerUploadModalOpen(true);
+        }
+      }}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Upload Installer</ModalTitle>
+            <ModalDescription>
+              Upload an installer package for end users to download and install your application.
+            </ModalDescription>
+          </ModalHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Target Platform</Label>
+              <select
+                value={selectedInstallerPlatform}
+                onChange={(e) => setSelectedInstallerPlatform(e.target.value as InstallerPlatform)}
+                className={cn(
+                  "w-full h-10 rounded-md px-3 cursor-pointer",
+                  "bg-[hsl(var(--input))] border border-[hsl(var(--border))]",
+                  "text-sm text-[hsl(var(--foreground))]",
+                  "focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                )}
+              >
+                <optgroup label="macOS">
+                  <option value="darwin-aarch64">macOS (Apple Silicon)</option>
+                  <option value="darwin-x86_64">macOS (Intel)</option>
+                  <option value="darwin-universal">macOS (Universal)</option>
+                </optgroup>
+                <optgroup label="Windows">
+                  <option value="windows-x86_64">Windows (64-bit)</option>
+                  <option value="windows-x86">Windows (32-bit)</option>
+                  <option value="windows-aarch64">Windows (ARM64)</option>
+                </optgroup>
+                <optgroup label="Linux">
+                  <option value="linux-x86_64">Linux (64-bit)</option>
+                  <option value="linux-aarch64">Linux (ARM64)</option>
+                  <option value="linux-armv7">Linux (ARMv7)</option>
+                </optgroup>
+              </select>
+              <p className="text-xs text-[hsl(var(--foreground-muted))]">
+                Platform will be auto-detected from filename if possible (e.g., arm64, x64, universal)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="installerDisplayName">Display Name (optional)</Label>
+              <input
+                id="installerDisplayName"
+                type="text"
+                value={installerDisplayName}
+                onChange={(e) => setInstallerDisplayName(e.target.value)}
+                placeholder="e.g., My App Installer for macOS"
+                className={cn(
+                  "w-full h-10 rounded-md px-3",
+                  "bg-[hsl(var(--input))] border border-[hsl(var(--border))]",
+                  "text-sm text-[hsl(var(--foreground))]",
+                  "placeholder:text-[hsl(var(--foreground-muted))]",
+                  "focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                )}
+              />
+              <p className="text-xs text-[hsl(var(--foreground-muted))]">
+                A friendly name to display instead of the filename
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>File</Label>
+              <div
+                className={cn(
+                  "border-2 border-dashed border-[hsl(var(--border))] rounded-lg p-8",
+                  "flex flex-col items-center justify-center gap-4",
+                  "hover:border-[hsl(var(--primary))] hover:bg-[hsl(var(--muted))]/50",
+                  "transition-colors cursor-pointer"
+                )}
+                onClick={() => installerFileInputRef.current?.click()}
+              >
+                <Download className="h-10 w-10 text-[hsl(var(--foreground-muted))]" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+                    Click to select installer file
+                  </p>
+                  <p className="text-xs text-[hsl(var(--foreground-muted))]">
+                    or drag and drop
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-[hsl(var(--foreground-muted))]">
+                Supported formats: {getValidInstallerTypesDescription()}
+              </p>
+              <input
+                ref={installerFileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleInstallerFileChange}
+                accept=".dmg,.pkg,.exe,.msi,.deb,.rpm,.AppImage,.snap"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <input
+                type="checkbox"
+                id="installerReplaceExisting"
+                checked={installerReplaceExisting}
+                onChange={(e) => setInstallerReplaceExisting(e.target.checked)}
+                className={cn(
+                  "h-4 w-4 rounded",
+                  "border border-[hsl(var(--border))]",
+                  "bg-[hsl(var(--input))]",
+                  "text-[hsl(var(--primary))]",
+                  "focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-0"
+                )}
+              />
+              <label
+                htmlFor="installerReplaceExisting"
+                className="text-sm text-[hsl(var(--foreground))] cursor-pointer"
+              >
+                Replace existing installer for this platform
+              </label>
+            </div>
+            <p className="text-xs text-[hsl(var(--foreground-muted))]">
+              Enable this option to overwrite an existing installer for the selected platform.
+            </p>
+          </div>
+
+          <ModalFooter>
+            <Button variant="outline" onClick={handleCloseInstallerUploadModal}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Page>
   );
 }
@@ -948,6 +1427,94 @@ function ArtifactRow({ artifact, canDelete, onDelete, isDeleting }: ArtifactRowP
         {artifact.downloadUrl && (
           <a
             href={artifact.downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex"
+          >
+            <Button variant="ghost" size="sm">
+              <FileDown className="h-4 w-4" />
+            </Button>
+          </a>
+        )}
+        {canDelete && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            disabled={isDeleting}
+            className="text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))] hover:bg-red-500/10"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface InstallerRowProps {
+  installer: Installer;
+  canDelete: boolean;
+  onDelete: () => void;
+  isDeleting: boolean;
+}
+
+function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerRowProps) {
+  const [copied, setCopied] = React.useState(false);
+
+  const hash = extractHash(installer.checksum);
+  const displayName = installer.displayName || installer.filename;
+
+  const handleCopyHash = async () => {
+    if (!hash) return;
+    const success = await copyToClipboard(hash);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between p-4 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]/50 transition-colors">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <span className="text-xs px-2 py-1 rounded-md bg-[hsl(var(--muted))] text-[hsl(var(--foreground-muted))] whitespace-nowrap">
+          {formatInstallerPlatform(installer.platform)}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-[hsl(var(--foreground))] truncate">
+            {displayName}
+          </p>
+          <div className="flex items-center gap-4 text-sm text-[hsl(var(--foreground-muted))]">
+            {installer.displayName && (
+              <span className="font-mono text-xs truncate max-w-[200px]" title={installer.filename}>
+                {installer.filename}
+              </span>
+            )}
+            {installer.fileSize !== null && (
+              <span>{formatFileSize(installer.fileSize)}</span>
+            )}
+            {hash && (
+              <button
+                onClick={handleCopyHash}
+                className="flex items-center gap-1 font-mono text-xs hover:text-[hsl(var(--foreground))] transition-colors"
+                title="Copy SHA-256 hash"
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-emerald-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+                {hash.slice(0, 8)}...
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 ml-4">
+        {installer.downloadUrl && (
+          <a
+            href={installer.downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex"
