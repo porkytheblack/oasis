@@ -10,6 +10,7 @@ import {
   setApiUrl,
   getApiUrl,
 } from "./api";
+import { getDefaultApiUrlRuntime } from "./config";
 
 /**
  * Authentication state interface.
@@ -37,7 +38,7 @@ const defaultContextValue: AuthContextValue = {
   isAuthenticated: false,
   isLoading: true,
   apiKey: null,
-  apiUrl: "http://localhost:9090",
+  apiUrl: getDefaultApiUrlRuntime(),
   login: async () => ({ success: false, error: "Context not initialized" }),
   logout: () => {},
   updateApiUrl: () => {},
@@ -72,12 +73,12 @@ interface AuthProviderProps {
  * Manages authentication state and provides login/logout functionality.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [state, setState] = React.useState<AuthState>({
+  const [state, setState] = React.useState<AuthState>(() => ({
     isAuthenticated: false,
     isLoading: true,
     apiKey: null,
-    apiUrl: "http://localhost:9090",
-  });
+    apiUrl: getDefaultApiUrlRuntime(),
+  }));
 
   /**
    * Initialize authentication state from localStorage on mount.

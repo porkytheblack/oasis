@@ -12,15 +12,17 @@ import {
   Button,
 } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
+import { getDefaultApiUrlRuntime } from "@/lib/config";
 import { Settings as SettingsIcon, Server, Save } from "lucide-react";
 import * as React from "react";
 
 export default function SettingsPage() {
   const toast = useToast();
+  const defaultApiUrl = getDefaultApiUrlRuntime();
   const [apiUrl, setApiUrl] = React.useState(
     typeof window !== "undefined"
-      ? localStorage.getItem("oasis_api_url") || "http://localhost:3000"
-      : "http://localhost:3000"
+      ? localStorage.getItem("oasis_api_url") || defaultApiUrl
+      : defaultApiUrl
   );
 
   const handleSave = () => {
@@ -52,7 +54,7 @@ export default function SettingsPage() {
               <Label htmlFor="apiUrl">API Server URL</Label>
               <Input
                 id="apiUrl"
-                placeholder="http://localhost:3000"
+                placeholder={defaultApiUrl}
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
                 className="font-mono"

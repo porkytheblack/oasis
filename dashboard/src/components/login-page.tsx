@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useAuth } from "@/lib/auth-context";
 import { validateApiKeyFormat, getApiUrl } from "@/lib/api";
+import { getDefaultApiUrlRuntime, getDocsUrlRuntime } from "@/lib/config";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -176,7 +177,7 @@ export function LoginPage() {
                   <Input
                     id="api-url"
                     type="url"
-                    placeholder="http://localhost:9090"
+                    placeholder={getDefaultApiUrlRuntime()}
                     value={customUrl}
                     onChange={(e) => setCustomUrl(e.target.value)}
                     className="font-mono text-sm"
@@ -206,7 +207,7 @@ export function LoginPage() {
         <p className="text-center text-xs text-[hsl(var(--foreground-muted))] mt-8">
           Need an API key?{" "}
           <a
-            href="https://github.com/your-org/oasis"
+            href={getDocsUrlRuntime()}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[hsl(var(--accent))] hover:text-[hsl(var(--highlight))] transition-colors cursor-pointer"

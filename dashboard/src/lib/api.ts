@@ -20,6 +20,7 @@ import type {
   ConfirmUploadRequest,
   ConfirmUploadResponse,
 } from "./types";
+import { getDefaultApiUrlRuntime } from "./config";
 
 /**
  * API Key prefix for validation.
@@ -28,7 +29,7 @@ const API_KEY_PREFIX = "uk_live_";
 
 /**
  * Gets the API base URL from localStorage with environment variable fallback.
- * Defaults to localhost:9090 for development.
+ * Uses the centralized config for default values.
  */
 function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
@@ -37,7 +38,7 @@ function getApiBaseUrl(): string {
       return storedUrl;
     }
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:9090";
+  return getDefaultApiUrlRuntime();
 }
 
 /**
