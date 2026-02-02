@@ -1,0 +1,616 @@
+@import "tailwindcss";
+
+/**
+ * Oasis Admin Dashboard - Design System
+ *
+ * Inspired by hex.tech's sophisticated digital luxury aesthetic
+ * Featuring deep jewel tones (eggplant/amethyst) with rose accents
+ * Typography: Sora (primary), IBM Plex Mono (code)
+ */
+
+@theme inline {
+  /* Font families - Sora as primary, IBM Plex Mono for code */
+  /* These reference the CSS variables set by Next.js Google Fonts */
+  --font-sans: var(--font-sora), "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", "JetBrains Mono", "Fira Code", Monaco, Consolas, monospace;
+
+  /* Color mappings from CSS variables */
+  --color-background: var(--background);
+  --color-background-subtle: var(--background-subtle);
+  --color-background-muted: var(--background-muted);
+  --color-background-elevated: var(--background-elevated);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-highlight: var(--highlight);
+
+  /* Border radius - hex.tech style */
+  --radius-sm: 3px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* Animation */
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-fade-out: fade-out 0.2s ease-out;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-slide-down: slide-down 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-scale-up: scale-up 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-spin: spin 1s linear infinite;
+  --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Keyframes */
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes fade-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes slide-up {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slide-down {
+  0% { transform: translateY(-10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scale-up {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(164, 119, 178, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(164, 119, 178, 0.4); }
+}
+
+/* =============================================================================
+   DARK THEME (DEFAULT) - hex.tech inspired palette
+   ============================================================================= */
+:root {
+  /* Background colors - deep eggplant layered for depth */
+  --background: 270 25% 4%;           /* #0c0a10 - Deepest */
+  --background-subtle: 270 25% 7%;    /* #12101a - Subtle elevation */
+  --background-muted: 270 20% 10%;    /* #1a1724 - Card backgrounds */
+  --background-elevated: 270 18% 14%; /* #221f2e - Elevated surfaces */
+
+  /* Foreground/text colors - warm off-whites with rose tint */
+  --foreground: 350 40% 94%;          /* #f5e6e8 - Primary text */
+  --foreground-muted: 350 18% 66%;    /* #b39da0 - Secondary text */
+  --foreground-subtle: 350 12% 44%;   /* #7a6668 - Tertiary text */
+
+  /* Primary - Minsk purple (hex.tech deep purple) */
+  --primary: 252 38% 37%;             /* #473982 */
+  --primary-foreground: 350 40% 94%;  /* #f5e6e8 */
+
+  /* Secondary - Jade (hex.tech teal) */
+  --secondary: 158 42% 48%;           /* #5CB198 */
+  --secondary-foreground: 0 0% 100%;  /* #ffffff */
+
+  /* Accent - Amethyst (hex.tech purple accent) */
+  --accent: 289 30% 58%;              /* #A477B2 */
+  --accent-foreground: 0 0% 100%;     /* #ffffff */
+
+  /* Highlight - Rose Quartz (hex.tech signature rose) */
+  --highlight: 0 60% 86%;             /* #F5C0C0 */
+
+  /* Destructive - Warm red */
+  --destructive: 0 72% 51%;           /* #dc2626 */
+  --destructive-foreground: 0 0% 100%;
+
+  /* Muted surfaces */
+  --muted: 270 20% 10%;               /* #1a1724 */
+  --muted-foreground: 350 10% 58%;    /* #9a8a8c */
+
+  /* Card surfaces */
+  --card: 270 25% 7%;                 /* #12101a */
+  --card-foreground: 350 40% 94%;     /* #f5e6e8 */
+
+  /* Borders and inputs */
+  --border: 270 15% 18%;              /* #2a2538 */
+  --input: 270 20% 10%;               /* #1a1724 */
+  --ring: 252 30% 45%;                /* #5a4a9a */
+
+  /* Sidebar */
+  --sidebar: 270 30% 3%;              /* #09080c */
+  --sidebar-foreground: 350 20% 82%;  /* #d9c9cc */
+  --sidebar-accent: 270 25% 12%;      /* #1f1a2a */
+  --sidebar-accent-foreground: 350 40% 94%;
+  --sidebar-border: 270 20% 8%;       /* #1a1524 */
+
+  /* Grid colors (hex.tech inspired) */
+  --grid-200: #252128;
+  --grid-300: #302a35;
+  --grid-400: #3b3440;
+  --grid-500: #4a4250;
+  --grid-600: #5a5260;
+  --grid-700: #6a6270;
+
+  /* Chart colors */
+  --chart-1: 289 30% 58%;   /* Amethyst */
+  --chart-2: 158 42% 52%;   /* Jade */
+  --chart-3: 43 96% 56%;    /* Amber */
+  --chart-4: 199 89% 48%;   /* Sky */
+  --chart-5: 350 89% 60%;   /* Rose */
+}
+
+/* =============================================================================
+   LIGHT THEME
+   ============================================================================= */
+.light {
+  --background: 0 0% 100%;
+  --background-subtle: 270 20% 98%;
+  --background-muted: 270 15% 96%;
+  --background-elevated: 0 0% 100%;
+
+  --foreground: 270 25% 10%;
+  --foreground-muted: 270 15% 35%;
+  --foreground-subtle: 270 10% 55%;
+
+  --primary: 252 38% 37%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 158 55% 35%;
+  --secondary-foreground: 0 0% 100%;
+
+  --accent: 289 30% 50%;
+  --accent-foreground: 0 0% 100%;
+
+  --highlight: 350 70% 45%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --muted: 270 15% 94%;
+  --muted-foreground: 270 15% 40%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 270 25% 10%;
+
+  --border: 270 15% 88%;
+  --input: 270 15% 94%;
+  --ring: 252 50% 55%;
+
+  --sidebar: 270 20% 97%;
+  --sidebar-foreground: 270 25% 20%;
+  --sidebar-accent: 270 20% 92%;
+  --sidebar-accent-foreground: 270 25% 10%;
+  --sidebar-border: 270 15% 90%;
+
+  --grid-200: #f4f2f7;
+  --grid-300: #ebe8f0;
+  --grid-400: #ddd8e5;
+  --grid-500: #ccc6d4;
+  --grid-600: #b8b0c2;
+  --grid-700: #a49aae;
+
+  --chart-1: 289 40% 50%;
+  --chart-2: 158 55% 40%;
+  --chart-3: 35 90% 50%;
+  --chart-4: 199 85% 45%;
+  --chart-5: 350 80% 55%;
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth transitions for theme switching */
+* {
+  transition-property: background-color, border-color;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* Disable transitions for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* =============================================================================
+   FOCUS STYLES (Accessibility)
+   ============================================================================= */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* =============================================================================
+   SCROLLBAR STYLING (hex.tech inspired minimal style)
+   ============================================================================= */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background-muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+  transition: background 150ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--foreground-subtle));
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) hsl(var(--background-muted));
+}
+
+/* =============================================================================
+   SELECTION COLORS
+   ============================================================================= */
+::selection {
+  background: hsl(var(--accent) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* =============================================================================
+   TYPOGRAPHY UTILITIES
+   ============================================================================= */
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--highlight)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-rose {
+  background: linear-gradient(135deg, hsl(var(--highlight)) 0%, hsl(var(--accent)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* =============================================================================
+   STATUS BADGES
+   ============================================================================= */
+.status-draft {
+  background-color: hsl(43 96% 56% / 0.15);
+  color: hsl(43 96% 50%);
+  border-color: hsl(43 96% 50% / 0.3);
+}
+
+.status-published {
+  background-color: hsl(158 42% 48% / 0.15);
+  color: hsl(158 50% 55%);
+  border-color: hsl(158 42% 48% / 0.3);
+}
+
+.status-archived {
+  background-color: hsl(var(--foreground-muted) / 0.15);
+  color: hsl(var(--foreground-muted));
+  border-color: hsl(var(--foreground-muted) / 0.3);
+}
+
+/* =============================================================================
+   PLATFORM BADGES
+   ============================================================================= */
+.platform-darwin {
+  background-color: hsl(0 0% 10%);
+  color: hsl(0 0% 100%);
+  border-color: hsl(0 0% 30%);
+}
+
+.platform-windows {
+  background-color: hsl(199 89% 48%);
+  color: hsl(0 0% 100%);
+  border-color: hsl(199 89% 55%);
+}
+
+.platform-linux {
+  background-color: hsl(43 96% 56%);
+  color: hsl(0 0% 10%);
+  border-color: hsl(43 96% 65%);
+}
+
+/* =============================================================================
+   SCOPE BADGES
+   ============================================================================= */
+.scope-admin {
+  background-color: hsl(252 38% 37% / 0.2);
+  color: hsl(289 30% 70%);
+  border-color: hsl(252 38% 45% / 0.3);
+}
+
+.scope-ci {
+  background-color: hsl(158 42% 48% / 0.2);
+  color: hsl(158 50% 60%);
+  border-color: hsl(158 42% 48% / 0.3);
+}
+
+/* =============================================================================
+   GLASSMORPHISM UTILITIES (hex.tech style)
+   ============================================================================= */
+.glass {
+  background: hsl(var(--card) / 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.glass-subtle {
+  background: hsl(var(--card) / 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* =============================================================================
+   GLOW EFFECTS (hex.tech style)
+   ============================================================================= */
+.glow-purple {
+  box-shadow: 0 0 20px rgba(164, 119, 178, 0.3);
+}
+
+.glow-rose {
+  box-shadow: 0 0 20px rgba(245, 192, 192, 0.3);
+}
+
+.glow-jade {
+  box-shadow: 0 0 20px rgba(92, 177, 152, 0.3);
+}
+
+/* =============================================================================
+   CARD SHADOWS (hex.tech layered shadow system)
+   ============================================================================= */
+.shadow-card {
+  box-shadow:
+    0 0 24px 0px var(--grid-200) inset,
+    0px 2px 8px -2px rgba(0, 0, 0, 0.3);
+}
+
+.shadow-card-hover {
+  box-shadow:
+    0 0 24px 0px var(--grid-300) inset,
+    0px 4px 12px -2px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(164, 119, 178, 0.1);
+}
+
+/* =============================================================================
+   GRADIENT BACKGROUNDS (hex.tech style)
+   ============================================================================= */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+}
+
+.bg-gradient-subtle {
+  background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background-subtle)) 100%);
+}
+
+.bg-gradient-radial {
+  background: radial-gradient(circle at 50% 0%, hsl(var(--background-elevated)) 0%, hsl(var(--background)) 70%);
+}
+
+/* =============================================================================
+   INTERACTIVE STATES
+   ============================================================================= */
+.interactive {
+  transition: all 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.interactive:hover {
+  transform: translateY(-1px);
+}
+
+.interactive:active {
+  transform: translateY(0);
+}
+
+/* =============================================================================
+   BUTTON GRADIENT (hex.tech style)
+   ============================================================================= */
+.btn-gradient {
+  background: linear-gradient(45deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-gradient::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transition: left 400ms ease;
+}
+
+.btn-gradient:hover::before {
+  left: 100%;
+}
+
+/* =============================================================================
+   LOADING SKELETON
+   ============================================================================= */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--background-elevated)) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* =============================================================================
+   CODE BLOCKS
+   ============================================================================= */
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-feature-settings: "liga" 0;
+}
+
+pre {
+  background: hsl(var(--background-subtle));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+code:not(pre code) {
+  background: hsl(var(--muted));
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  color: hsl(var(--highlight));
+}
+
+/* =============================================================================
+   FORM ELEMENTS
+   ============================================================================= */
+input::placeholder,
+textarea::placeholder {
+  color: hsl(var(--foreground-subtle));
+}
+
+/* Remove default autofill styling */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: hsl(var(--foreground));
+  -webkit-box-shadow: 0 0 0px 1000px hsl(var(--input)) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* =============================================================================
+   TABLE STYLES
+   ============================================================================= */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  color: hsl(var(--foreground-muted));
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+tr:hover td {
+  background: hsl(var(--muted) / 0.5);
+}
+
+/* =============================================================================
+   DIVIDERS
+   ============================================================================= */
+hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1.5rem 0;
+}
+
+/* =============================================================================
+   LINKS
+   ============================================================================= */
+a {
+  color: hsl(var(--accent));
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+a:hover {
+  color: hsl(var(--highlight));
+}
+
+/* =============================================================================
+   RESPONSIVE TYPOGRAPHY
+   ============================================================================= */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1536px) {
+  html {
+    font-size: 17px;
+  }
+}
