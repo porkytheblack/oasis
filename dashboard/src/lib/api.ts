@@ -24,6 +24,8 @@ import type {
   PresignInstallerResponse,
   ConfirmInstallerUploadRequest,
   ConfirmInstallerUploadResponse,
+  AppDownloadSummary,
+  ReleaseDownloadStats,
 } from "./types";
 import { getDefaultApiUrlRuntime } from "./config";
 
@@ -536,6 +538,35 @@ export async function deleteInstaller(
   await apiClient.delete(
     `/admin/apps/${appId}/releases/${releaseId}/installers/${installerId}`
   );
+}
+
+// =============================================================================
+// Analytics API
+// =============================================================================
+
+/**
+ * Fetches aggregate download statistics for an app.
+ * Includes total downloads, total updates, and per-version breakdown.
+ */
+export async function getAppAnalyticsSummary(appId: string): Promise<AppDownloadSummary> {
+  const response = await apiClient.get<{ success: boolean; data: AppDownloadSummary }>(
+    `/admin/apps/${appId}/analytics/summary`
+  );
+  return extractData(response);
+}
+
+/**
+ * Fetches download statistics for a specific release.
+ * Includes download counts broken down by type (update vs installer) and platform.
+ */
+export async function getReleaseAnalytics(
+  appId: string,
+  releaseId: string
+): Promise<ReleaseDownloadStats> {
+  const response = await apiClient.get<{ success: boolean; data: ReleaseDownloadStats }>(
+    `/admin/apps/${appId}/releases/${releaseId}/analytics`
+  );
+  return extractData(response);
 }
 
 // =============================================================================

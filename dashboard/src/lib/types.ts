@@ -394,3 +394,71 @@ export interface ConfirmInstallerUploadRequest {
 export interface ConfirmInstallerUploadResponse {
   installer: Installer;
 }
+
+// =============================================================================
+// Analytics Types
+// =============================================================================
+
+/**
+ * Platform download statistics for analytics.
+ */
+export interface PlatformDownloadStats {
+  /** The platform identifier */
+  platform: string;
+  /** Total downloads for this platform */
+  count: number;
+}
+
+/**
+ * Download statistics for a single release.
+ * Breaks down downloads by type (update vs installer).
+ */
+export interface ReleaseDownloadStats {
+  /** The release ID */
+  releaseId: string;
+  /** The version string */
+  version: string;
+  /** Total number of update downloads (Tauri updater) */
+  updateDownloads: number;
+  /** Total number of installer downloads (standalone installers) */
+  installerDownloads: number;
+  /** Combined total of all downloads */
+  totalDownloads: number;
+  /** Downloads broken down by platform */
+  byPlatform: PlatformDownloadStats[];
+}
+
+/**
+ * Per-version download breakdown for app summary.
+ */
+export interface VersionDownloadBreakdown {
+  /** The version string */
+  version: string;
+  /** The release ID */
+  releaseId: string;
+  /** Number of update downloads for this version */
+  updateDownloads: number;
+  /** Number of installer downloads for this version */
+  installerDownloads: number;
+  /** Combined total of all downloads for this version */
+  totalDownloads: number;
+}
+
+/**
+ * Aggregate download statistics for an entire app.
+ * Provides totals and per-version breakdown.
+ */
+export interface AppDownloadSummary {
+  /** The app ID */
+  appId: string;
+  /** Total number of update downloads across all versions */
+  totalUpdateDownloads: number;
+  /** Total number of installer downloads across all versions */
+  totalInstallerDownloads: number;
+  /** Combined total of all downloads */
+  totalDownloads: number;
+  /** Downloads broken down by version */
+  byVersion: VersionDownloadBreakdown[];
+  /** Downloads broken down by platform */
+  byPlatform: PlatformDownloadStats[];
+}
