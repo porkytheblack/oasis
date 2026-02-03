@@ -38,9 +38,9 @@ export type DownloadType = "update" | "installer";
  */
 export interface RecordDownloadOptions {
   /** The ID of the artifact (for update downloads) */
-  artifactId?: string;
+  artifactId?: string | undefined;
   /** The ID of the installer (for installer downloads) */
-  installerId?: string;
+  installerId?: string | undefined;
   /** The ID of the app */
   appId: string;
   /** The target platform (e.g., "darwin-aarch64") */
@@ -48,7 +48,7 @@ export interface RecordDownloadOptions {
   /** The version being downloaded */
   version: string;
   /** Optional ISO country code from CDN headers */
-  ipCountry?: string;
+  ipCountry?: string | undefined;
   /** Type of download: 'update' or 'installer' */
   downloadType: DownloadType;
 }
