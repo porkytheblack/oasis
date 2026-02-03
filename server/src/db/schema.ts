@@ -138,14 +138,19 @@ export const installers = pgTable(
 
 /**
  * Download Events table - for tracking download analytics
+ * Supports both artifact downloads (updates) and installer downloads.
+ * Either artifactId or installerId should be set, but not both.
  */
 export const downloadEvents = pgTable(
   "download_events",
   {
     id: text("id").primaryKey(),
+    // For update downloads (Tauri updater)
     artifactId: text("artifact_id")
-      .notNull()
       .references(() => artifacts.id, { onDelete: "cascade" }),
+    // For installer downloads (standalone installers)
+    installerId: text("installer_id")
+      .references(() => installers.id, { onDelete: "cascade" }),
     appId: text("app_id")
       .notNull()
       .references(() => apps.id, { onDelete: "cascade" }),
@@ -159,6 +164,7 @@ export const downloadEvents = pgTable(
   },
   (table) => [
     index("download_events_artifact_id_idx").on(table.artifactId),
+    index("download_events_installer_id_idx").on(table.installerId),
     index("download_events_app_id_idx").on(table.appId),
     index("download_events_downloaded_at_idx").on(table.downloadedAt),
     index("download_events_platform_idx").on(table.platform),

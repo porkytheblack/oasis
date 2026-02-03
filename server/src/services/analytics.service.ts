@@ -34,34 +34,43 @@ export class ArtifactNotFoundForAnalyticsError extends Error {
 export type DownloadType = "update" | "installer";
 
 /**
+ * Options for recording a download event.
+ */
+export interface RecordDownloadOptions {
+  /** The ID of the artifact (for update downloads) */
+  artifactId?: string;
+  /** The ID of the installer (for installer downloads) */
+  installerId?: string;
+  /** The ID of the app */
+  appId: string;
+  /** The target platform (e.g., "darwin-aarch64") */
+  platform: string;
+  /** The version being downloaded */
+  version: string;
+  /** Optional ISO country code from CDN headers */
+  ipCountry?: string;
+  /** Type of download: 'update' or 'installer' */
+  downloadType: DownloadType;
+}
+
+/**
  * Records a download event for analytics tracking.
  *
  * Called when a Tauri client receives an update response or when an installer is downloaded.
  * Does not block the response - errors are logged but not thrown.
  *
- * @param artifactId - The ID of the artifact or installer being downloaded
- * @param appId - The ID of the app
- * @param platform - The target platform (e.g., "darwin-aarch64")
- * @param version - The version being downloaded
- * @param ipCountry - Optional ISO country code from CDN headers
- * @param downloadType - Type of download: 'update' (default) or 'installer'
+ * @param options - The download event options
  */
-export async function recordDownload(
-  artifactId: string,
-  appId: string,
-  platform: string,
-  version: string,
-  ipCountry?: string,
-  downloadType: DownloadType = "update"
-): Promise<void> {
+export async function recordDownload(options: RecordDownloadOptions): Promise<void> {
   const newEvent: NewDownloadEvent = {
     id: ulid(),
-    artifactId,
-    appId,
-    platform,
-    version,
-    ipCountry: ipCountry ?? null,
-    downloadType,
+    artifactId: options.artifactId ?? null,
+    installerId: options.installerId ?? null,
+    appId: options.appId,
+    platform: options.platform,
+    version: options.version,
+    ipCountry: options.ipCountry ?? null,
+    downloadType: options.downloadType,
     downloadedAt: new Date(),
   };
 
@@ -72,25 +81,14 @@ export async function recordDownload(
  * Records a download event asynchronously without blocking.
  * Errors are logged but do not affect the calling code.
  *
- * @param artifactId - The ID of the artifact or installer being downloaded
- * @param appId - The ID of the app
- * @param platform - The target platform
- * @param version - The version being downloaded
- * @param ipCountry - Optional ISO country code
- * @param downloadType - Type of download: 'update' (default) or 'installer'
+ * @param options - The download event options
  */
-export function recordDownloadAsync(
-  artifactId: string,
-  appId: string,
-  platform: string,
-  version: string,
-  ipCountry?: string,
-  downloadType: DownloadType = "update"
-): void {
-  recordDownload(artifactId, appId, platform, version, ipCountry, downloadType).catch((error) => {
+export function recordDownloadAsync(options: RecordDownloadOptions): void {
+  recordDownload(options).catch((error) => {
     console.error("Failed to record download event:", error);
   });
 }
+
 
 /**
  * Validates that an app exists by ID.
