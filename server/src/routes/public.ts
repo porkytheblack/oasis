@@ -117,13 +117,14 @@ publicRoutes.get("/:app_slug/update/:target/:current_version", async (c) => {
   if (result.hasUpdate) {
     // Record the download event asynchronously (non-blocking)
     const ipCountry = extractCountryFromHeaders((name) => c.req.header(name));
-    recordDownloadAsync(
-      result.metadata.artifactId,
-      result.metadata.appId,
-      result.metadata.platform,
-      result.metadata.version,
-      ipCountry
-    );
+    recordDownloadAsync({
+      artifactId: result.metadata.artifactId,
+      appId: result.metadata.appId,
+      platform: result.metadata.platform,
+      version: result.metadata.version,
+      ipCountry,
+      downloadType: "update",
+    });
 
     // Return the Tauri update response directly (not wrapped in our API response format)
     // Tauri expects the raw response format
@@ -179,13 +180,14 @@ publicRoutes.get(
     if (result.hasUpdate) {
       // Record the download event asynchronously (non-blocking)
       const ipCountry = extractCountryFromHeaders((name) => c.req.header(name));
-      recordDownloadAsync(
-        result.metadata.artifactId,
-        result.metadata.appId,
-        result.metadata.platform,
-        result.metadata.version,
-        ipCountry
-      );
+      recordDownloadAsync({
+        artifactId: result.metadata.artifactId,
+        appId: result.metadata.appId,
+        platform: result.metadata.platform,
+        version: result.metadata.version,
+        ipCountry,
+        downloadType: "update",
+      });
 
       return c.json(result.response, 200);
     }
@@ -397,14 +399,14 @@ publicRoutes.get("/:app_slug/download/:platform", async (c) => {
 
   // Record the download event asynchronously
   const ipCountry = extractCountryFromHeaders((name) => c.req.header(name));
-  recordDownloadAsync(
-    installer.id,
-    app.id,
-    matchedPlatform,
-    latestRelease.version,
+  recordDownloadAsync({
+    installerId: installer.id,
+    appId: app.id,
+    platform: matchedPlatform,
+    version: latestRelease.version,
     ipCountry,
-    "installer"
-  );
+    downloadType: "installer",
+  });
 
   // Return JSON or redirect based on format query param
   if (formatJson) {
@@ -501,14 +503,14 @@ publicRoutes.get("/:app_slug/download/:platform/:version", async (c) => {
 
   // Record the download event asynchronously
   const ipCountryVersioned = extractCountryFromHeaders((name) => c.req.header(name));
-  recordDownloadAsync(
-    versionedInstaller.id,
-    app.id,
-    versionedMatchedPlatform,
-    release.version,
-    ipCountryVersioned,
-    "installer"
-  );
+  recordDownloadAsync({
+    installerId: versionedInstaller.id,
+    appId: app.id,
+    platform: versionedMatchedPlatform,
+    version: release.version,
+    ipCountry: ipCountryVersioned,
+    downloadType: "installer",
+  });
 
   // Return JSON or redirect based on format query param
   if (formatJson) {
