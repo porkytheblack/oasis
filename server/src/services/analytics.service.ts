@@ -1,6 +1,6 @@
 import { eq, and, gte, lte, sql, desc, count } from "drizzle-orm";
 import { ulid } from "ulid";
-import { db, downloadEvents, apps } from "../db/index.js";
+import { db, downloadEvents, apps, releases } from "../db/index.js";
 import type { DownloadEvent, NewDownloadEvent } from "../db/schema.js";
 import type {
   DownloadStatsOptions,
@@ -427,4 +427,237 @@ export async function getRecentDownloads(
   });
 
   return events;
+}
+
+/**
+ * Error thrown when a release is not found for analytics operations.
+ */
+export class ReleaseNotFoundForAnalyticsError extends Error {
+  constructor(releaseId: string) {
+    super(`Release with ID '${releaseId}' was not found`);
+    this.name = "ReleaseNotFoundForAnalyticsError";
+  }
+}
+
+/**
+ * Retrieves download statistics for a specific release.
+ *
+ * Provides counts broken down by download type (update vs installer)
+ * and by platform.
+ *
+ * @param appId - The app ID
+ * @param releaseId - The release ID
+ * @returns Release download statistics
+ * @throws AppNotFoundForAnalyticsError if the app doesn't exist
+ * @throws ReleaseNotFoundForAnalyticsError if the release doesn't exist
+ */
+export async function getReleaseDownloadStats(
+  appId: string,
+  releaseId: string
+): Promise<{
+  releaseId: string;
+  version: string;
+  updateDownloads: number;
+  installerDownloads: number;
+  totalDownloads: number;
+  byPlatform: { platform: string; count: number }[];
+}> {
+  await validateAppExists(appId);
+
+  // Verify the release exists and get its version
+  const release = await db.query.releases.findFirst({
+    where: and(eq(releases.id, releaseId), eq(releases.appId, appId)),
+  });
+
+  if (!release) {
+    throw new ReleaseNotFoundForAnalyticsError(releaseId);
+  }
+
+  // Get downloads grouped by download type
+  const typeStats = await db
+    .select({
+      downloadType: downloadEvents.downloadType,
+      count: count(),
+    })
+    .from(downloadEvents)
+    .where(
+      and(
+        eq(downloadEvents.appId, appId),
+        eq(downloadEvents.version, release.version)
+      )
+    )
+    .groupBy(downloadEvents.downloadType);
+
+  // Extract update and installer counts
+  let updateDownloads = 0;
+  let installerDownloads = 0;
+
+  for (const row of typeStats) {
+    if (row.downloadType === "update") {
+      updateDownloads = row.count;
+    } else if (row.downloadType === "installer") {
+      installerDownloads = row.count;
+    }
+  }
+
+  const totalDownloads = updateDownloads + installerDownloads;
+
+  // Get downloads by platform
+  const platformStats = await db
+    .select({
+      platform: downloadEvents.platform,
+      count: count(),
+    })
+    .from(downloadEvents)
+    .where(
+      and(
+        eq(downloadEvents.appId, appId),
+        eq(downloadEvents.version, release.version)
+      )
+    )
+    .groupBy(downloadEvents.platform)
+    .orderBy(desc(count()));
+
+  const byPlatform = platformStats.map((row) => ({
+    platform: row.platform,
+    count: row.count,
+  }));
+
+  return {
+    releaseId,
+    version: release.version,
+    updateDownloads,
+    installerDownloads,
+    totalDownloads,
+    byPlatform,
+  };
+}
+
+/**
+ * Retrieves aggregate download statistics for an app.
+ *
+ * Provides total counts across all versions, broken down by
+ * download type (update vs installer), per-version breakdown,
+ * and by platform.
+ *
+ * @param appId - The app ID
+ * @returns App download summary
+ * @throws AppNotFoundForAnalyticsError if the app doesn't exist
+ */
+export async function getAppDownloadSummary(appId: string): Promise<{
+  appId: string;
+  totalUpdateDownloads: number;
+  totalInstallerDownloads: number;
+  totalDownloads: number;
+  byVersion: {
+    version: string;
+    releaseId: string;
+    updateDownloads: number;
+    installerDownloads: number;
+    totalDownloads: number;
+  }[];
+  byPlatform: { platform: string; count: number }[];
+}> {
+  await validateAppExists(appId);
+
+  // Get total downloads by type
+  const typeStats = await db
+    .select({
+      downloadType: downloadEvents.downloadType,
+      count: count(),
+    })
+    .from(downloadEvents)
+    .where(eq(downloadEvents.appId, appId))
+    .groupBy(downloadEvents.downloadType);
+
+  let totalUpdateDownloads = 0;
+  let totalInstallerDownloads = 0;
+
+  for (const row of typeStats) {
+    if (row.downloadType === "update") {
+      totalUpdateDownloads = row.count;
+    } else if (row.downloadType === "installer") {
+      totalInstallerDownloads = row.count;
+    }
+  }
+
+  const totalDownloads = totalUpdateDownloads + totalInstallerDownloads;
+
+  // Get downloads by version and type
+  const versionTypeStats = await db
+    .select({
+      version: downloadEvents.version,
+      downloadType: downloadEvents.downloadType,
+      count: count(),
+    })
+    .from(downloadEvents)
+    .where(eq(downloadEvents.appId, appId))
+    .groupBy(downloadEvents.version, downloadEvents.downloadType)
+    .orderBy(desc(count()));
+
+  // Get all releases for this app to map version to releaseId
+  const appReleases = await db.query.releases.findMany({
+    where: eq(releases.appId, appId),
+  });
+
+  const releaseMap = new Map<string, string>();
+  for (const release of appReleases) {
+    releaseMap.set(release.version, release.id);
+  }
+
+  // Aggregate version stats
+  const versionMap = new Map<
+    string,
+    { updateDownloads: number; installerDownloads: number }
+  >();
+
+  for (const row of versionTypeStats) {
+    const current = versionMap.get(row.version) || {
+      updateDownloads: 0,
+      installerDownloads: 0,
+    };
+
+    if (row.downloadType === "update") {
+      current.updateDownloads = row.count;
+    } else if (row.downloadType === "installer") {
+      current.installerDownloads = row.count;
+    }
+
+    versionMap.set(row.version, current);
+  }
+
+  const byVersion = Array.from(versionMap.entries())
+    .map(([version, stats]) => ({
+      version,
+      releaseId: releaseMap.get(version) || "",
+      updateDownloads: stats.updateDownloads,
+      installerDownloads: stats.installerDownloads,
+      totalDownloads: stats.updateDownloads + stats.installerDownloads,
+    }))
+    .sort((a, b) => b.totalDownloads - a.totalDownloads);
+
+  // Get downloads by platform
+  const platformStats = await db
+    .select({
+      platform: downloadEvents.platform,
+      count: count(),
+    })
+    .from(downloadEvents)
+    .where(eq(downloadEvents.appId, appId))
+    .groupBy(downloadEvents.platform)
+    .orderBy(desc(count()));
+
+  const byPlatform = platformStats.map((row) => ({
+    platform: row.platform,
+    count: row.count,
+  }));
+
+  return {
+    appId,
+    totalUpdateDownloads,
+    totalInstallerDownloads,
+    totalDownloads,
+    byVersion,
+    byPlatform,
+  };
 }

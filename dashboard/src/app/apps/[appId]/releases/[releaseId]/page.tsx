@@ -18,6 +18,7 @@ import {
   publishRelease,
   archiveRelease,
   updateRelease,
+  getReleaseAnalytics,
   computeFileHash,
   getErrorMessage,
 } from "@/lib/api";
@@ -66,6 +67,9 @@ import {
   ShieldCheck,
   FileSignature,
   Download,
+  Link2,
+  RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import {
   formatFileSize,
@@ -147,6 +151,11 @@ export default function ReleaseDetailPage() {
   const { data: installers = [], isLoading: installersLoading } = useQuery({
     queryKey: ["installers", appId, releaseId],
     queryFn: () => getInstallers(appId, releaseId),
+  });
+
+  const { data: releaseAnalytics } = useQuery({
+    queryKey: ["release-analytics", appId, releaseId],
+    queryFn: () => getReleaseAnalytics(appId, releaseId),
   });
 
   const updateMutation = useMutation({
@@ -733,6 +742,55 @@ export default function ReleaseDetailPage() {
           ))}
         </div>
       )}
+
+      {/* Download Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-[hsl(var(--primary))]/10">
+                <TrendingUp className="h-5 w-5 text-[hsl(var(--primary))]" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Total Downloads</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {releaseAnalytics?.totalDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <RefreshCw className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Updates</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {releaseAnalytics?.updateDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Download className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Installer Downloads</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {releaseAnalytics?.installerDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Release Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -1461,6 +1519,7 @@ interface InstallerRowProps {
 
 function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerRowProps) {
   const [copied, setCopied] = React.useState(false);
+  const [linkCopied, setLinkCopied] = React.useState(false);
 
   const hash = extractHash(installer.checksum);
   const displayName = installer.displayName || installer.filename;
@@ -1471,6 +1530,15 @@ function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerR
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!installer.downloadUrl) return;
+    const success = await copyToClipboard(installer.downloadUrl);
+    if (success) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
     }
   };
 
@@ -1512,6 +1580,20 @@ function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerR
       </div>
 
       <div className="flex items-center gap-2 ml-4">
+        {installer.downloadUrl && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopyLink}
+            title="Copy download link"
+          >
+            {linkCopied ? (
+              <Check className="h-4 w-4 text-emerald-500" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+          </Button>
+        )}
         {installer.downloadUrl && (
           <a
             href={installer.downloadUrl}

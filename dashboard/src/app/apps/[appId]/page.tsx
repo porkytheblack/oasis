@@ -10,6 +10,7 @@ import {
   publishRelease,
   archiveRelease,
   deleteRelease,
+  getAppAnalyticsSummary,
   getErrorMessage,
 } from "@/lib/api";
 import type { CreateReleaseRequest, Release } from "@/lib/types";
@@ -43,6 +44,9 @@ import {
   Archive,
   Trash2,
   MoreVertical,
+  Download,
+  RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import { formatRelativeTime, isValidSemver } from "@/lib/utils";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -70,6 +74,11 @@ export default function AppDetailPage() {
   const { data: releases = [], isLoading: releasesLoading, error: releasesError } = useQuery({
     queryKey: ["releases", appId],
     queryFn: () => getReleases(appId),
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["app-analytics", appId],
+    queryFn: () => getAppAnalyticsSummary(appId),
   });
 
   const createMutation = useMutation({
@@ -185,6 +194,70 @@ export default function AppDetailPage() {
         </Button>
       }
     >
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-[hsl(var(--primary))]/10">
+                <TrendingUp className="h-5 w-5 text-[hsl(var(--primary))]" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Total Downloads</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {analytics?.totalDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <RefreshCw className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Updates</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {analytics?.totalUpdateDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Download className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Installer Downloads</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {analytics?.totalInstallerDownloads?.toLocaleString() ?? 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-violet-500/10">
+                <Package className="h-5 w-5 text-violet-500" />
+              </div>
+              <div>
+                <p className="text-sm text-[hsl(var(--foreground-muted))]">Total Releases</p>
+                <p className="text-2xl font-semibold text-[hsl(var(--foreground))]">
+                  {releases.length}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* App Info Card */}
       <Card className="mb-6">
         <CardContent className="p-6">
@@ -194,18 +267,14 @@ export default function AppDetailPage() {
               new Date(b.pubDate || b.createdAt).getTime() - new Date(a.pubDate || a.createdAt).getTime()
             )[0];
             return (
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm text-[hsl(var(--foreground-muted))] mb-1">Slug</p>
                   <p className="font-mono text-[hsl(var(--foreground))]">{app.slug}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[hsl(var(--foreground-muted))] mb-1">Published</p>
+                  <p className="text-sm text-[hsl(var(--foreground-muted))] mb-1">Published Releases</p>
                   <p className="text-[hsl(var(--foreground))]">{publishedReleases.length}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[hsl(var(--foreground-muted))] mb-1">Total Releases</p>
-                  <p className="text-[hsl(var(--foreground))]">{releases.length}</p>
                 </div>
                 <div>
                   <p className="text-sm text-[hsl(var(--foreground-muted))] mb-1">Latest Version</p>

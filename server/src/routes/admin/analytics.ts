@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import {
   getDownloadStats,
   getDownloadTimeSeries,
+  getReleaseDownloadStats,
+  getAppDownloadSummary,
   AppNotFoundForAnalyticsError,
+  ReleaseNotFoundForAnalyticsError,
 } from "../../services/analytics.service.js";
 import {
   success,
@@ -15,6 +18,8 @@ import {
   timeSeriesQuerySchema,
   ulidSchema,
   type TimeSeriesResponse,
+  type ReleaseDownloadStats,
+  type AppDownloadSummary,
 } from "../../types/index.js";
 import type { AuthVariables } from "../../middleware/auth.js";
 
@@ -253,6 +258,131 @@ analyticsRoutes.get("/:app_id/analytics/timeseries", async (c) => {
       return notFound(c, "App", appId);
     }
     console.error("Error fetching time series data:", error);
+    return internalError(c);
+  }
+});
+
+/**
+ * GET /admin/apps/:app_id/analytics/summary
+ *
+ * Get aggregate download statistics for an app including total downloads,
+ * total updates, and per-version breakdown.
+ *
+ * @example
+ * GET /admin/apps/01HQWX5K8J2MXPZ9Y7VBNC3DFE/analytics/summary
+ *
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "appId": "01HQWX5K8J2MXPZ9Y7VBNC3DFE",
+ *     "totalUpdateDownloads": 5000,
+ *     "totalInstallerDownloads": 1500,
+ *     "totalDownloads": 6500,
+ *     "byVersion": [
+ *       { "version": "1.2.0", "releaseId": "...", "updateDownloads": 3000, "installerDownloads": 800, "totalDownloads": 3800 },
+ *       { "version": "1.1.0", "releaseId": "...", "updateDownloads": 2000, "installerDownloads": 700, "totalDownloads": 2700 }
+ *     ],
+ *     "byPlatform": [
+ *       { "platform": "darwin-aarch64", "count": 2500 },
+ *       { "platform": "windows-x86_64", "count": 2000 }
+ *     ]
+ *   }
+ * }
+ */
+analyticsRoutes.get("/:app_id/analytics/summary", async (c) => {
+  const appId = c.req.param("app_id");
+
+  // Validate app_id format
+  const idParseResult = ulidSchema.safeParse(appId);
+  if (!idParseResult.success) {
+    return zodValidationError(c, idParseResult.error);
+  }
+
+  try {
+    const summary = await getAppDownloadSummary(appId);
+
+    const response: AppDownloadSummary = {
+      appId: summary.appId,
+      totalUpdateDownloads: summary.totalUpdateDownloads,
+      totalInstallerDownloads: summary.totalInstallerDownloads,
+      totalDownloads: summary.totalDownloads,
+      byVersion: summary.byVersion,
+      byPlatform: summary.byPlatform,
+    };
+
+    return success(c, response);
+  } catch (error) {
+    if (error instanceof AppNotFoundForAnalyticsError) {
+      return notFound(c, "App", appId);
+    }
+    console.error("Error fetching app download summary:", error);
+    return internalError(c);
+  }
+});
+
+/**
+ * GET /admin/apps/:app_id/releases/:release_id/analytics
+ *
+ * Get download statistics for a specific release, broken down by
+ * download type (update vs installer) and platform.
+ *
+ * @example
+ * GET /admin/apps/01HQWX5K8J2MXPZ9Y7VBNC3DFE/releases/01HQWX6K8J2MXPZ9Y7VBNC3DFE/analytics
+ *
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "releaseId": "01HQWX6K8J2MXPZ9Y7VBNC3DFE",
+ *     "version": "1.2.0",
+ *     "updateDownloads": 3000,
+ *     "installerDownloads": 800,
+ *     "totalDownloads": 3800,
+ *     "byPlatform": [
+ *       { "platform": "darwin-aarch64", "count": 1500 },
+ *       { "platform": "windows-x86_64", "count": 1200 }
+ *     ]
+ *   }
+ * }
+ */
+analyticsRoutes.get("/:app_id/releases/:release_id/analytics", async (c) => {
+  const appId = c.req.param("app_id");
+  const releaseId = c.req.param("release_id");
+
+  // Validate app_id format
+  const appIdParseResult = ulidSchema.safeParse(appId);
+  if (!appIdParseResult.success) {
+    return zodValidationError(c, appIdParseResult.error);
+  }
+
+  // Validate release_id format
+  const releaseIdParseResult = ulidSchema.safeParse(releaseId);
+  if (!releaseIdParseResult.success) {
+    return zodValidationError(c, releaseIdParseResult.error);
+  }
+
+  try {
+    const stats = await getReleaseDownloadStats(appId, releaseId);
+
+    const response: ReleaseDownloadStats = {
+      releaseId: stats.releaseId,
+      version: stats.version,
+      updateDownloads: stats.updateDownloads,
+      installerDownloads: stats.installerDownloads,
+      totalDownloads: stats.totalDownloads,
+      byPlatform: stats.byPlatform,
+    };
+
+    return success(c, response);
+  } catch (error) {
+    if (error instanceof AppNotFoundForAnalyticsError) {
+      return notFound(c, "App", appId);
+    }
+    if (error instanceof ReleaseNotFoundForAnalyticsError) {
+      return notFound(c, "Release", releaseId);
+    }
+    console.error("Error fetching release download stats:", error);
     return internalError(c);
   }
 });
