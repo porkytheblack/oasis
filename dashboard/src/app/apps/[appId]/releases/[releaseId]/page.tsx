@@ -21,6 +21,7 @@ import {
   getReleaseAnalytics,
   computeFileHash,
   getErrorMessage,
+  getApiUrl,
 } from "@/lib/api";
 import type {
   Artifact,
@@ -70,6 +71,7 @@ import {
   Link2,
   RefreshCw,
   TrendingUp,
+  BarChart3,
 } from "lucide-react";
 import {
   formatFileSize,
@@ -1059,6 +1061,8 @@ export default function ReleaseDetailPage() {
                 <InstallerRow
                   key={installer.id}
                   installer={installer}
+                  appSlug={app?.slug || ""}
+                  version={release.version}
                   canDelete={release.status === "draft"}
                   onDelete={() => deleteInstallerMutation.mutate(installer.id)}
                   isDeleting={deleteInstallerMutation.isPending}
@@ -1512,17 +1516,23 @@ function ArtifactRow({ artifact, canDelete, onDelete, isDeleting }: ArtifactRowP
 
 interface InstallerRowProps {
   installer: Installer;
+  appSlug: string;
+  version: string;
   canDelete: boolean;
   onDelete: () => void;
   isDeleting: boolean;
 }
 
-function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerRowProps) {
+function InstallerRow({ installer, appSlug, version, canDelete, onDelete, isDeleting }: InstallerRowProps) {
   const [copied, setCopied] = React.useState(false);
-  const [linkCopied, setLinkCopied] = React.useState(false);
+  const [directLinkCopied, setDirectLinkCopied] = React.useState(false);
+  const [trackedLinkCopied, setTrackedLinkCopied] = React.useState(false);
 
   const hash = extractHash(installer.checksum);
   const displayName = installer.displayName || installer.filename;
+
+  // Construct the tracked download URL (goes through API for analytics)
+  const trackedDownloadUrl = `${getApiUrl()}/${appSlug}/download/${installer.platform}/${version}`;
 
   const handleCopyHash = async () => {
     if (!hash) return;
@@ -1533,12 +1543,20 @@ function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerR
     }
   };
 
-  const handleCopyLink = async () => {
+  const handleCopyDirectLink = async () => {
     if (!installer.downloadUrl) return;
     const success = await copyToClipboard(installer.downloadUrl);
     if (success) {
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      setDirectLinkCopied(true);
+      setTimeout(() => setDirectLinkCopied(false), 2000);
+    }
+  };
+
+  const handleCopyTrackedLink = async () => {
+    const success = await copyToClipboard(trackedDownloadUrl);
+    if (success) {
+      setTrackedLinkCopied(true);
+      setTimeout(() => setTrackedLinkCopied(false), 2000);
     }
   };
 
@@ -1580,20 +1598,35 @@ function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerR
       </div>
 
       <div className="flex items-center gap-2 ml-4">
+        {/* Tracked link (for sharing - counts downloads) */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCopyTrackedLink}
+          title="Copy tracked link (counts downloads)"
+        >
+          {trackedLinkCopied ? (
+            <Check className="h-4 w-4 text-emerald-500" />
+          ) : (
+            <BarChart3 className="h-4 w-4" />
+          )}
+        </Button>
+        {/* Direct link (CDN - no tracking) */}
         {installer.downloadUrl && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleCopyLink}
-            title="Copy download link"
+            onClick={handleCopyDirectLink}
+            title="Copy direct link (no tracking)"
           >
-            {linkCopied ? (
+            {directLinkCopied ? (
               <Check className="h-4 w-4 text-emerald-500" />
             ) : (
               <Link2 className="h-4 w-4" />
             )}
           </Button>
         )}
+        {/* Download button */}
         {installer.downloadUrl && (
           <a
             href={installer.downloadUrl}
@@ -1601,7 +1634,7 @@ function InstallerRow({ installer, canDelete, onDelete, isDeleting }: InstallerR
             rel="noopener noreferrer"
             className="inline-flex"
           >
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Download">
               <FileDown className="h-4 w-4" />
             </Button>
           </a>
