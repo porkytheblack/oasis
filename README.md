@@ -78,6 +78,12 @@ cp .env.example .env
 npm run dev
 ```
 
+## CI/CD
+
+Reusable GitHub Actions workflow and composite actions are available for Tauri releases with Oasis integration.
+
+Docs: `docs/ci/tauri-release.md`
+
 ## Environment Variables
 
 ### Server

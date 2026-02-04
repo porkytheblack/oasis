@@ -430,6 +430,94 @@ publicRoutes.get("/:app_slug/download/:platform", async (c) => {
 });
 
 /**
+ * GET /:app_slug/releases/latest
+ *
+ * Public endpoint to fetch the latest published release details
+ * for landing pages.
+ *
+ * Response includes version, pubDate, and all installers with download URLs.
+ *
+ * Response codes:
+ * - 200: Latest release details
+ * - 404: App not found or no published releases
+ *
+ * @example
+ * GET /my-app/releases/latest
+ *
+ * Response (200):
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "version": "1.2.0",
+ *     "pubDate": "2024-01-15T10:00:00.000Z",
+ *     "installers": [
+ *       {
+ *         "platform": "darwin-aarch64",
+ *         "filename": "MyApp_1.2.0_darwin-aarch64.dmg",
+ *         "displayName": "macOS (Apple Silicon)",
+ *         "downloadUrl": "https://cdn.example.com/...",
+ *         "fileSize": 52428800
+ *       }
+ *     ]
+ *   }
+ * }
+ */
+publicRoutes.get("/:app_slug/releases/latest", async (c) => {
+  const appSlug = c.req.param("app_slug");
+
+  const appSlugResult = z
+    .string()
+    .min(2, "App slug must be at least 2 characters")
+    .max(50, "App slug must be at most 50 characters")
+    .safeParse(appSlug);
+
+  if (!appSlugResult.success) {
+    return zodValidationError(c, appSlugResult.error);
+  }
+
+  const app = await db.query.apps.findFirst({
+    where: eq(apps.slug, appSlug),
+  });
+
+  if (!app) {
+    return notFound(c, "App", appSlug);
+  }
+
+  const latestRelease = await db.query.releases.findFirst({
+    where: and(
+      eq(releases.appId, app.id),
+      eq(releases.status, "published")
+    ),
+    orderBy: desc(releases.pubDate),
+  });
+
+  if (!latestRelease) {
+    return notFound(c, "Published release for app", appSlug);
+  }
+
+  const releaseInstallers = await db.query.installers.findMany({
+    where: eq(installers.releaseId, latestRelease.id),
+    orderBy: installers.platform,
+  });
+
+  const installersList = releaseInstallers
+    .filter((installer) => installer.downloadUrl)
+    .map((installer) => ({
+      platform: installer.platform as InstallerPlatform,
+      filename: installer.filename,
+      displayName: installer.displayName,
+      downloadUrl: installer.downloadUrl as string,
+      fileSize: installer.fileSize,
+    }));
+
+  return success(c, {
+    version: latestRelease.version,
+    pubDate: latestRelease.pubDate,
+    installers: installersList,
+  });
+});
+
+/**
  * GET /:app_slug/download/:platform/:version
  *
  * Public endpoint to download a specific version's installer for a given platform.

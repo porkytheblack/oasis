@@ -1,0 +1,167 @@
+name: "Oasis Register Release"
+description: "Register a Tauri release with Oasis using artifacts stored in R2"
+inputs:
+  app_slug:
+    description: "Oasis app slug"
+    required: true
+  version:
+    description: "Release version (no leading v)"
+    required: true
+  artifact_prefix:
+    description: "Filename prefix for artifacts (e.g., Rigid)"
+    required: true
+  installers_dir:
+    description: "Directory containing installer artifacts"
+    default: "artifacts/installers"
+  updates_dir:
+    description: "Directory containing update artifacts"
+    default: "artifacts/updates"
+  installers_prefix:
+    description: "R2 key prefix for installers (relative to app slug)"
+    default: "installers"
+  updates_prefix:
+    description: "R2 key prefix for update artifacts (relative to app slug)"
+    default: "releases"
+  platforms:
+    description: "Comma-separated platform list (e.g., darwin-aarch64,darwin-x86_64,linux-x86_64,windows-x86_64)"
+    default: "darwin-aarch64,darwin-x86_64,linux-x86_64,windows-x86_64"
+  notes:
+    description: "Release notes"
+    default: ""
+  auto_publish:
+    description: "Auto-publish the release in Oasis"
+    default: "false"
+  oasis_server_url:
+    description: "Base URL of Oasis server"
+    required: true
+  oasis_ci_key:
+    description: "Oasis CI API key"
+    required: true
+  dry_run:
+    description: "Skip API call but print payload"
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Register release with Oasis
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        VERSION="${{ inputs.version }}"
+        APP_SLUG="${{ inputs.app_slug }}"
+        ARTIFACT_PREFIX="${{ inputs.artifact_prefix }}"
+        INSTALLERS_DIR="${{ inputs.installers_dir }}"
+        UPDATES_DIR="${{ inputs.updates_dir }}"
+        INSTALLERS_PREFIX="${{ inputs.installers_prefix }}"
+        UPDATES_PREFIX="${{ inputs.updates_prefix }}"
+        PLATFORMS_CSV="${{ inputs.platforms }}"
+        NOTES="${{ inputs.notes }}"
+
+        if [ -z "$NOTES" ]; then
+          NOTES="Release v$VERSION"
+        fi
+
+        if [ "${{ inputs.auto_publish }}" = "true" ]; then
+          AUTO_PUBLISH=true
+        else
+          AUTO_PUBLISH=false
+        fi
+
+        artifacts='[]'
+        installers='[]'
+
+        IFS=',' read -ra PLATFORMS <<< "$PLATFORMS_CSV"
+        for platform in "${PLATFORMS[@]}"; do
+          platform=$(echo "$platform" | xargs)
+          os=${platform%%-*}
+
+          case "$os" in
+            darwin)
+              update_ext=".app.tar.gz"
+              installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}.dmg"
+              if [ "$platform" = "darwin-aarch64" ]; then
+                display_name="macOS (Apple Silicon)"
+              else
+                display_name="macOS (Intel)"
+              fi
+              ;;
+            linux)
+              update_ext=".AppImage.tar.gz"
+              installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}.AppImage"
+              display_name="Linux (64-bit)"
+              ;;
+            windows)
+              update_ext=".nsis.zip"
+              installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}-setup.exe"
+              display_name="Windows (64-bit)"
+              ;;
+            *)
+              echo "Unknown platform OS for $platform, skipping"
+              continue
+              ;;
+          esac
+
+          update_file="$UPDATES_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}${update_ext}"
+          sig_file="$update_file.sig"
+
+          if [ -f "$update_file" ] && [ -f "$sig_file" ]; then
+            signature=$(cat "$sig_file")
+            r2_key="$APP_SLUG/$UPDATES_PREFIX/$VERSION/${ARTIFACT_PREFIX}_${VERSION}_${platform}${update_ext}"
+            artifacts=$(jq --arg platform "$platform" \
+              --arg signature "$signature" \
+              --arg r2_key "$r2_key" \
+              '. + [{platform:$platform, signature:$signature, r2_key:$r2_key}]' <<< "$artifacts")
+            echo "Added update artifact for $platform"
+          else
+            echo "Warning: Missing update artifact or signature for $platform"
+          fi
+
+          if [ -f "$installer_file" ]; then
+            filename=$(basename "$installer_file")
+            r2_key="$APP_SLUG/$INSTALLERS_PREFIX/$VERSION/$filename"
+            installers=$(jq --arg platform "$platform" \
+              --arg filename "$filename" \
+              --arg r2_key "$r2_key" \
+              --arg display_name "$display_name" \
+              '. + [{platform:$platform, filename:$filename, r2_key:$r2_key, display_name:$display_name}]' <<< "$installers")
+            echo "Added installer for $platform"
+          else
+            echo "No installer found for $platform (optional)"
+          fi
+        done
+
+        payload=$(jq -n \
+          --arg version "$VERSION" \
+          --arg notes "$NOTES" \
+          --argjson artifacts "$artifacts" \
+          --argjson installers "$installers" \
+          --argjson auto_publish "$AUTO_PUBLISH" \
+          '{version:$version, notes:$notes, artifacts:$artifacts, installers:$installers, auto_publish:$auto_publish}')
+
+        echo "Payload:"
+        echo "$payload" | jq .
+
+        if [ "${{ inputs.dry_run }}" = "true" ]; then
+          echo "Dry run enabled - skipping Oasis registration"
+          exit 0
+        fi
+
+        response=$(curl -s -w "\n%{http_code}" -X POST \
+          "${{ inputs.oasis_server_url }}/ci/apps/$APP_SLUG/releases" \
+          -H "Authorization: Bearer ${{ inputs.oasis_ci_key }}" \
+          -H "Content-Type: application/json" \
+          -d "$payload")
+
+        http_code=$(echo "$response" | tail -1)
+        body=$(echo "$response" | head -n -1)
+
+        echo "Response code: $http_code"
+        echo "Response body: $body"
+
+        if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+          echo "Failed to register release with Oasis"
+          exit 1
+        fi
+
+        echo "Successfully registered release $VERSION with Oasis"

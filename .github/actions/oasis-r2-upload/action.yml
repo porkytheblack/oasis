@@ -1,0 +1,125 @@
+name: "Oasis R2 Upload"
+description: "Upload Tauri installers and update bundles to Cloudflare R2 for Oasis"
+inputs:
+  app_slug:
+    description: "Oasis app slug"
+    required: true
+  version:
+    description: "Release version (no leading v)"
+    required: true
+  installers_dir:
+    description: "Directory containing installer artifacts"
+    default: "artifacts/installers"
+  updates_dir:
+    description: "Directory containing update artifacts"
+    default: "artifacts/updates"
+  installers_prefix:
+    description: "R2 key prefix for installers (relative to app slug)"
+    default: "installers"
+  updates_prefix:
+    description: "R2 key prefix for update artifacts (relative to app slug)"
+    default: "releases"
+  r2_bucket:
+    description: "R2 bucket name"
+    required: true
+  r2_account_id:
+    description: "Cloudflare account ID"
+    required: true
+  r2_access_key_id:
+    description: "R2 access key ID"
+    required: true
+  r2_secret_access_key:
+    description: "R2 secret access key"
+    required: true
+  r2_acl:
+    description: "R2 ACL (private or public-read)"
+    default: "private"
+  r2_endpoint:
+    description: "Optional R2 endpoint (overrides account-id based endpoint)"
+    default: ""
+  dry_run:
+    description: "Skip uploads but print what would happen"
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Install rclone
+      shell: bash
+      run: |
+        curl -fsSLO https://downloads.rclone.org/rclone-current-linux-amd64.deb
+        sudo dpkg -i rclone-current-linux-amd64.deb
+
+    - name: Configure rclone
+      shell: bash
+      run: |
+        mkdir -p ~/.config/rclone
+        echo "[r2]" > ~/.config/rclone/rclone.conf
+        echo "type = s3" >> ~/.config/rclone/rclone.conf
+        echo "provider = Cloudflare" >> ~/.config/rclone/rclone.conf
+        echo "access_key_id = ${{ inputs.r2_access_key_id }}" >> ~/.config/rclone/rclone.conf
+        echo "secret_access_key = ${{ inputs.r2_secret_access_key }}" >> ~/.config/rclone/rclone.conf
+        if [ -n "${{ inputs.r2_endpoint }}" ]; then
+          echo "endpoint = ${{ inputs.r2_endpoint }}" >> ~/.config/rclone/rclone.conf
+        else
+          echo "endpoint = https://${{ inputs.r2_account_id }}.r2.cloudflarestorage.com" >> ~/.config/rclone/rclone.conf
+        fi
+        echo "acl = ${{ inputs.r2_acl }}" >> ~/.config/rclone/rclone.conf
+        echo "no_check_bucket = true" >> ~/.config/rclone/rclone.conf
+
+    - name: Upload installers to R2
+      shell: bash
+      run: |
+        if [ "${{ inputs.dry_run }}" = "true" ]; then
+          echo "Dry run enabled - skipping installer uploads"
+          exit 0
+        fi
+
+        VERSION="${{ inputs.version }}"
+        BUCKET="${{ inputs.r2_bucket }}"
+        APP_SLUG="${{ inputs.app_slug }}"
+        PREFIX="${{ inputs.installers_prefix }}"
+        INSTALLERS_DIR="${{ inputs.installers_dir }}"
+
+        echo "=== Uploading Installers ==="
+        if [ -d "$INSTALLERS_DIR" ] && [ "$(ls -A "$INSTALLERS_DIR" 2>/dev/null)" ]; then
+          for file in "$INSTALLERS_DIR"/*; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              R2_KEY="$APP_SLUG/$PREFIX/$VERSION/$FILENAME"
+              echo "Uploading $FILENAME to r2:$BUCKET/$R2_KEY"
+              rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+              echo "Uploaded: $R2_KEY"
+            fi
+          done
+        else
+          echo "No installers to upload"
+        fi
+
+    - name: Upload updates to R2
+      shell: bash
+      run: |
+        if [ "${{ inputs.dry_run }}" = "true" ]; then
+          echo "Dry run enabled - skipping update uploads"
+          exit 0
+        fi
+
+        VERSION="${{ inputs.version }}"
+        BUCKET="${{ inputs.r2_bucket }}"
+        APP_SLUG="${{ inputs.app_slug }}"
+        PREFIX="${{ inputs.updates_prefix }}"
+        UPDATES_DIR="${{ inputs.updates_dir }}"
+
+        echo "=== Uploading Update Artifacts ==="
+        if [ -d "$UPDATES_DIR" ] && [ "$(ls -A "$UPDATES_DIR" 2>/dev/null)" ]; then
+          for file in "$UPDATES_DIR"/*; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              R2_KEY="$APP_SLUG/$PREFIX/$VERSION/$FILENAME"
+              echo "Uploading $FILENAME to r2:$BUCKET/$R2_KEY"
+              rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+              echo "Uploaded: $R2_KEY"
+            fi
+          done
+        else
+          echo "No updates to upload"
+        fi
