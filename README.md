@@ -133,6 +133,8 @@ Response (update available):
 
 Response (no update): `204 No Content`
 
+Full public API docs: `server/docs/public-api.md`
+
 ### Admin Endpoints
 
 All admin endpoints require authentication via API key:
