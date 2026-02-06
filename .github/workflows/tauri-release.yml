@@ -472,35 +472,184 @@ jobs:
           echo "=== Updates ==="
           ls -la ${{ inputs.artifacts_dir }}/updates/ || echo "No updates found"
 
-      - name: Upload artifacts to R2
-        if: contains(inputs.distribute_to, 'r2')
-        uses: ./.github/actions/oasis-r2-upload
-        with:
-          app_slug: ${{ inputs.app_slug }}
-          version: ${{ steps.get_version.outputs.version }}
-          installers_dir: ${{ inputs.artifacts_dir }}/installers
-          updates_dir: ${{ inputs.artifacts_dir }}/updates
-          r2_bucket: ${{ secrets.R2_BUCKET_NAME }}
-          r2_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          r2_access_key_id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          r2_secret_access_key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-          dry_run: ${{ inputs.dry_run }}
+      - name: Install rclone
+        if: contains(inputs.distribute_to, 'r2') && !inputs.dry_run
+        run: |
+          curl -fsSLO https://downloads.rclone.org/rclone-current-linux-amd64.deb
+          sudo dpkg -i rclone-current-linux-amd64.deb
+
+      - name: Configure rclone for R2
+        if: contains(inputs.distribute_to, 'r2') && !inputs.dry_run
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
+      - name: Upload installers to R2
+        if: contains(inputs.distribute_to, 'r2') && !inputs.dry_run
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BUCKET="${{ secrets.R2_BUCKET_NAME }}"
+          APP_SLUG="${{ inputs.app_slug }}"
+          INSTALLERS_DIR="${{ inputs.artifacts_dir }}/installers"
+
+          echo "=== Uploading Installers ==="
+          if [ -d "$INSTALLERS_DIR" ] && [ "$(ls -A "$INSTALLERS_DIR" 2>/dev/null)" ]; then
+            for file in "$INSTALLERS_DIR"/*; do
+              if [ -f "$file" ]; then
+                FILENAME=$(basename "$file")
+                R2_KEY="$APP_SLUG/installers/$VERSION/$FILENAME"
+                echo "Uploading $FILENAME to r2:$BUCKET/$R2_KEY"
+                rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+                echo "Uploaded: $R2_KEY"
+              fi
+            done
+          else
+            echo "No installers to upload"
+          fi
+
+      - name: Upload updates to R2
+        if: contains(inputs.distribute_to, 'r2') && !inputs.dry_run
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BUCKET="${{ secrets.R2_BUCKET_NAME }}"
+          APP_SLUG="${{ inputs.app_slug }}"
+          UPDATES_DIR="${{ inputs.artifacts_dir }}/updates"
+
+          echo "=== Uploading Update Artifacts ==="
+          if [ -d "$UPDATES_DIR" ] && [ "$(ls -A "$UPDATES_DIR" 2>/dev/null)" ]; then
+            for file in "$UPDATES_DIR"/*; do
+              if [ -f "$file" ]; then
+                FILENAME=$(basename "$file")
+                R2_KEY="$APP_SLUG/releases/$VERSION/$FILENAME"
+                echo "Uploading $FILENAME to r2:$BUCKET/$R2_KEY"
+                rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+                echo "Uploaded: $R2_KEY"
+              fi
+            done
+          else
+            echo "No updates to upload"
+          fi
 
       - name: Register release with Oasis
-        if: contains(inputs.distribute_to, 'oasis')
-        uses: ./.github/actions/oasis-register-release
-        with:
-          app_slug: ${{ inputs.app_slug }}
-          version: ${{ steps.get_version.outputs.version }}
-          artifact_prefix: ${{ inputs.artifact_prefix }}
-          installers_dir: ${{ inputs.artifacts_dir }}/installers
-          updates_dir: ${{ inputs.artifacts_dir }}/updates
-          platforms: ${{ inputs.platforms }}
-          notes: ${{ inputs.release_notes }}
-          auto_publish: ${{ inputs.auto_publish }}
-          oasis_server_url: ${{ secrets.OASIS_SERVER_URL }}
-          oasis_ci_key: ${{ secrets.OASIS_CI_KEY }}
-          dry_run: ${{ inputs.dry_run }}
+        if: contains(inputs.distribute_to, 'oasis') && !inputs.dry_run
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.get_version.outputs.version }}"
+          APP_SLUG="${{ inputs.app_slug }}"
+          ARTIFACT_PREFIX="${{ inputs.artifact_prefix }}"
+          INSTALLERS_DIR="${{ inputs.artifacts_dir }}/installers"
+          UPDATES_DIR="${{ inputs.artifacts_dir }}/updates"
+          PLATFORMS_CSV="${{ inputs.platforms }}"
+          NOTES="${{ inputs.release_notes }}"
+
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v$VERSION"
+          fi
+
+          AUTO_PUBLISH=${{ inputs.auto_publish }}
+
+          artifacts='[]'
+          installers='[]'
+
+          IFS=',' read -ra PLATFORMS <<< "$PLATFORMS_CSV"
+          for platform in "${PLATFORMS[@]}"; do
+            platform=$(echo "$platform" | xargs)
+            os=${platform%%-*}
+
+            case "$os" in
+              darwin)
+                update_ext=".app.tar.gz"
+                installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}.dmg"
+                if [ "$platform" = "darwin-aarch64" ]; then
+                  display_name="macOS (Apple Silicon)"
+                else
+                  display_name="macOS (Intel)"
+                fi
+                ;;
+              linux)
+                update_ext=".AppImage.tar.gz"
+                installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}.AppImage"
+                display_name="Linux (64-bit)"
+                ;;
+              windows)
+                update_ext=".nsis.zip"
+                installer_file="$INSTALLERS_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}-setup.exe"
+                display_name="Windows (64-bit)"
+                ;;
+              *)
+                echo "Unknown platform OS for $platform, skipping"
+                continue
+                ;;
+            esac
+
+            update_file="$UPDATES_DIR/${ARTIFACT_PREFIX}_${VERSION}_${platform}${update_ext}"
+            sig_file="$update_file.sig"
+
+            if [ -f "$update_file" ] && [ -f "$sig_file" ]; then
+              signature=$(cat "$sig_file")
+              r2_key="$APP_SLUG/releases/$VERSION/${ARTIFACT_PREFIX}_${VERSION}_${platform}${update_ext}"
+              artifacts=$(jq --arg platform "$platform" \
+                --arg signature "$signature" \
+                --arg r2_key "$r2_key" \
+                '. + [{platform:$platform, signature:$signature, r2_key:$r2_key}]' <<< "$artifacts")
+              echo "Added update artifact for $platform"
+            else
+              echo "Warning: Missing update artifact or signature for $platform"
+            fi
+
+            if [ -f "$installer_file" ]; then
+              filename=$(basename "$installer_file")
+              r2_key="$APP_SLUG/installers/$VERSION/$filename"
+              installers=$(jq --arg platform "$platform" \
+                --arg filename "$filename" \
+                --arg r2_key "$r2_key" \
+                --arg display_name "$display_name" \
+                '. + [{platform:$platform, filename:$filename, r2_key:$r2_key, display_name:$display_name}]' <<< "$installers")
+              echo "Added installer for $platform"
+            else
+              echo "No installer found for $platform (optional)"
+            fi
+          done
+
+          payload=$(jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --argjson artifacts "$artifacts" \
+            --argjson installers "$installers" \
+            --argjson auto_publish "$AUTO_PUBLISH" \
+            '{version:$version, notes:$notes, artifacts:$artifacts, installers:$installers, auto_publish:$auto_publish}')
+
+          echo "Payload:"
+          echo "$payload" | jq .
+
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.OASIS_SERVER_URL }}/ci/apps/$APP_SLUG/releases" \
+            -H "Authorization: Bearer ${{ secrets.OASIS_CI_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
+
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+
+          echo "Response code: $http_code"
+          echo "Response body: $body"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Failed to register release with Oasis"
+            exit 1
+          fi
+
+          echo "Successfully registered release $VERSION with Oasis"
 
   github-release:
     needs: [build, upload-and-register]
