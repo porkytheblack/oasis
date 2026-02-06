@@ -116,6 +116,10 @@ on:
         required: false
       OASIS_CI_KEY:
         required: false
+      NEXT_PUBLIC_OASIS_API_KEY:
+        required: false
+      NEXT_PUBLIC_OASIS_SERVER_URL:
+        required: false
 
 jobs:
   build:
@@ -262,6 +266,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NEXT_PUBLIC_OASIS_API_KEY: ${{ secrets.NEXT_PUBLIC_OASIS_API_KEY }}
+          NEXT_PUBLIC_OASIS_SERVER_URL: ${{ secrets.NEXT_PUBLIC_OASIS_SERVER_URL }}
         with:
           projectPath: ${{ inputs.app_dir }}
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundle_targets }}
