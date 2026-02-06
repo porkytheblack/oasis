@@ -37,7 +37,6 @@ on:
                 "target": "aarch64-apple-darwin",
                 "arch": "aarch64",
                 "os": "darwin",
-                "ffmpeg_target": "macos-arm64",
                 "bundle_targets": "app,dmg"
               },
               {
@@ -45,7 +44,6 @@ on:
                 "target": "x86_64-apple-darwin",
                 "arch": "x86_64",
                 "os": "darwin",
-                "ffmpeg_target": "macos-x64",
                 "bundle_targets": "app,dmg"
               },
               {
@@ -53,7 +51,6 @@ on:
                 "target": "x86_64-unknown-linux-gnu",
                 "arch": "x86_64",
                 "os": "linux",
-                "ffmpeg_target": "linux-x64",
                 "bundle_targets": "appimage,deb"
               },
               {
@@ -61,7 +58,6 @@ on:
                 "target": "x86_64-pc-windows-msvc",
                 "arch": "x86_64",
                 "os": "windows",
-                "ffmpeg_target": "windows",
                 "bundle_targets": "nsis"
               }
             ]
@@ -224,30 +220,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: ${{ steps.detect_pm.outputs.install_cmd }}
-
-      - name: Download FFmpeg (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          chmod +x src-tauri/scripts/download-ffmpeg.sh
-          src-tauri/scripts/download-ffmpeg.sh ${{ matrix.ffmpeg_target }}
-
-      - name: Download FFmpeg (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          chmod +x src-tauri/scripts/download-ffmpeg.sh
-          src-tauri/scripts/download-ffmpeg.sh ${{ matrix.ffmpeg_target }}
-
-      - name: Download FFmpeg (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path src-tauri/binaries
-          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:TEMP\ffmpeg-win.zip"
-          Expand-Archive -Path "$env:TEMP\ffmpeg-win.zip" -DestinationPath "$env:TEMP\ffmpeg-win" -Force
-          $binDir = Get-ChildItem -Path "$env:TEMP\ffmpeg-win" -Directory | Select-Object -First 1
-          Copy-Item "$($binDir.FullName)\bin\ffmpeg.exe" -Destination "src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe"
-          Copy-Item "$($binDir.FullName)\bin\ffprobe.exe" -Destination "src-tauri/binaries/ffprobe-x86_64-pc-windows-msvc.exe"
-          Get-ChildItem src-tauri/binaries/
 
       - name: Setup macOS code signing
         if: matrix.platform == 'macos-latest'
