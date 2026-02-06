@@ -37,6 +37,7 @@ import {
   ModalFooter,
 } from "@/components/ui";
 import { useToast } from "@/components/toast-provider";
+import { AppNav } from "@/components/app-nav";
 import {
   Plus,
   Package,
@@ -194,6 +195,9 @@ export default function AppDetailPage() {
         </Button>
       }
     >
+      {/* App Navigation */}
+      <AppNav appId={appId} />
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>

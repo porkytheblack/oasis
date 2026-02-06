@@ -5,6 +5,9 @@ import { releasesRoutes } from "./releases.js";
 import { artifactsRoutes } from "./artifacts.js";
 import { installersRoutes } from "./installers.js";
 import { analyticsRoutes } from "./analytics.js";
+import { publicKeysRoutes } from "./public-keys.js";
+import { feedbackRoutes } from "./feedback.js";
+import { crashesRoutes } from "./crashes.js";
 import { authMiddleware, requireAdminScope, type AuthVariables } from "../../middleware/auth.js";
 import { adminRateLimiter } from "../../middleware/rate-limit.js";
 
@@ -60,3 +63,21 @@ adminRoutes.route("/apps", artifactsRoutes);
 // Admin keys can access all apps, CI keys can only access their assigned app
 // The requireAppAccess middleware is applied within installersRoutes
 adminRoutes.route("/apps", installersRoutes);
+
+// Public API keys routes - admin scope only
+// Only admin keys can manage public SDK keys
+adminRoutes.use("/apps/:app_id/public-keys", requireAdminScope());
+adminRoutes.use("/apps/:app_id/public-keys/*", requireAdminScope());
+adminRoutes.route("/apps", publicKeysRoutes);
+
+// Feedback routes - admin scope only
+// Only admin keys can view and manage feedback
+adminRoutes.use("/apps/:app_id/feedback", requireAdminScope());
+adminRoutes.use("/apps/:app_id/feedback/*", requireAdminScope());
+adminRoutes.route("/apps", feedbackRoutes);
+
+// Crashes routes - admin scope only
+// Only admin keys can view and manage crash reports
+adminRoutes.use("/apps/:app_id/crashes", requireAdminScope());
+adminRoutes.use("/apps/:app_id/crashes/*", requireAdminScope());
+adminRoutes.route("/apps", crashesRoutes);

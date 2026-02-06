@@ -51,6 +51,30 @@ export type ReleaseStatus = (typeof RELEASE_STATUSES)[number];
 export const API_KEY_SCOPES = ["ci", "admin"] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
+/**
+ * Feedback categories
+ */
+export const FEEDBACK_CATEGORIES = ["bug", "feature", "general"] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+
+/**
+ * Feedback statuses
+ */
+export const FEEDBACK_STATUSES = ["open", "in_progress", "closed"] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
+/**
+ * Crash group statuses
+ */
+export const CRASH_GROUP_STATUSES = ["new", "investigating", "resolved", "ignored"] as const;
+export type CrashGroupStatus = (typeof CRASH_GROUP_STATUSES)[number];
+
+/**
+ * Crash severity levels
+ */
+export const CRASH_SEVERITIES = ["warning", "error", "fatal"] as const;
+export type CrashSeverity = (typeof CRASH_SEVERITIES)[number];
+
 // ============================================================================
 // Zod Schemas
 // ============================================================================
@@ -958,4 +982,322 @@ export interface AppDownloadSummary {
   byVersion: VersionDownloadBreakdown[];
   /** Downloads broken down by platform */
   byPlatform: PlatformDownloadStats[];
+}
+
+// ============================================================================
+// Feedback and Crash Analytics Types
+// ============================================================================
+
+/**
+ * Feedback category validation schema
+ */
+export const feedbackCategorySchema = z.enum(FEEDBACK_CATEGORIES);
+
+/**
+ * Feedback status validation schema
+ */
+export const feedbackStatusSchema = z.enum(FEEDBACK_STATUSES);
+
+/**
+ * Crash group status validation schema
+ */
+export const crashGroupStatusSchema = z.enum(CRASH_GROUP_STATUSES);
+
+/**
+ * Crash severity validation schema
+ */
+export const crashSeveritySchema = z.enum(CRASH_SEVERITIES);
+
+/**
+ * Stack frame schema for crash reports
+ */
+export const stackFrameSchema = z.object({
+  file: z.string().optional(),
+  line: z.number().optional(),
+  column: z.number().optional(),
+  function: z.string().optional(),
+  isNative: z.boolean().optional(),
+});
+
+export type StackFrame = z.infer<typeof stackFrameSchema>;
+
+/**
+ * Breadcrumb schema for crash context
+ */
+export const breadcrumbSchema = z.object({
+  type: z.string(),
+  message: z.string(),
+  timestamp: z.string(),
+  data: z.record(z.unknown()).optional(),
+});
+
+export type Breadcrumb = z.infer<typeof breadcrumbSchema>;
+
+/**
+ * Device info schema
+ */
+export const deviceInfoSchema = z.object({
+  model: z.string().optional(),
+  manufacturer: z.string().optional(),
+  cpuCores: z.number().optional(),
+  memoryTotal: z.number().optional(),
+  memoryFree: z.number().optional(),
+  diskTotal: z.number().optional(),
+  diskFree: z.number().optional(),
+}).passthrough();
+
+export type DeviceInfo = z.infer<typeof deviceInfoSchema>;
+
+/**
+ * Attachment schema for feedback
+ */
+export const attachmentSchema = z.object({
+  r2Key: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  size: z.number(),
+});
+
+export type Attachment = z.infer<typeof attachmentSchema>;
+
+// ============================================================================
+// Public API Key Types
+// ============================================================================
+
+/**
+ * Create public API key request schema
+ */
+export const createPublicApiKeySchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(100, "Name must be at most 100 characters"),
+});
+
+export type CreatePublicApiKeyDto = z.infer<typeof createPublicApiKeySchema>;
+
+/**
+ * Public API key response DTO
+ */
+export interface PublicApiKeyDto {
+  id: string;
+  appId: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+/**
+ * Response returned when creating a new public API key
+ */
+export interface PublicApiKeyCreateResponse {
+  /** The full API key - store this securely, it will not be shown again */
+  key: string;
+  /** The key details (without the full key) */
+  publicApiKey: PublicApiKeyDto;
+}
+
+// ============================================================================
+// Feedback Types
+// ============================================================================
+
+/**
+ * Submit feedback request schema (from SDK)
+ */
+export const submitFeedbackSchema = z.object({
+  category: feedbackCategorySchema,
+  message: z.string().min(1, "Message is required").max(10000, "Message must be at most 10000 characters"),
+  email: z.string().email("Invalid email address").optional(),
+  appVersion: semverSchema,
+  platform: z.string().min(1, "Platform is required"),
+  osVersion: z.string().optional(),
+  deviceInfo: deviceInfoSchema.optional(),
+  attachments: z.array(z.object({
+    data: z.string(), // base64
+    filename: z.string(),
+    mimeType: z.string(),
+  })).max(5, "Maximum 5 attachments allowed").optional(),
+});
+
+export type SubmitFeedbackDto = z.infer<typeof submitFeedbackSchema>;
+
+/**
+ * Update feedback request schema (admin)
+ */
+export const updateFeedbackSchema = z.object({
+  status: feedbackStatusSchema.optional(),
+  internalNotes: z.string().max(5000, "Notes must be at most 5000 characters").nullable().optional(),
+});
+
+export type UpdateFeedbackDto = z.infer<typeof updateFeedbackSchema>;
+
+/**
+ * Feedback response DTO
+ */
+export interface FeedbackDto {
+  id: string;
+  appId: string;
+  category: FeedbackCategory;
+  message: string;
+  email: string | null;
+  appVersion: string;
+  platform: string;
+  osVersion: string | null;
+  deviceInfo: DeviceInfo | null;
+  attachments: Attachment[];
+  status: FeedbackStatus;
+  internalNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * List feedback query schema
+ */
+export const listFeedbackQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+  status: feedbackStatusSchema.optional(),
+  category: feedbackCategorySchema.optional(),
+  version: z.string().optional(),
+  search: z.string().optional(),
+});
+
+export type ListFeedbackQuery = z.infer<typeof listFeedbackQuerySchema>;
+
+// ============================================================================
+// Crash Report Types
+// ============================================================================
+
+/**
+ * Submit crash report request schema (from SDK)
+ */
+export const submitCrashReportSchema = z.object({
+  errorType: z.string().min(1, "Error type is required").max(200),
+  errorMessage: z.string().min(1, "Error message is required").max(5000),
+  stackTrace: z.array(stackFrameSchema).min(1, "Stack trace is required"),
+  appVersion: semverSchema,
+  platform: z.string().min(1, "Platform is required"),
+  osVersion: z.string().optional(),
+  deviceInfo: deviceInfoSchema.optional(),
+  appState: z.record(z.unknown()).optional(),
+  breadcrumbs: z.array(breadcrumbSchema).max(100, "Maximum 100 breadcrumbs allowed").optional(),
+  severity: crashSeveritySchema.optional().default("error"),
+  userId: z.string().max(100).optional(),
+});
+
+export type SubmitCrashReportDto = z.infer<typeof submitCrashReportSchema>;
+
+/**
+ * Crash report response DTO
+ */
+export interface CrashReportDto {
+  id: string;
+  appId: string;
+  crashGroupId: string | null;
+  errorType: string;
+  errorMessage: string;
+  stackTrace: StackFrame[];
+  appVersion: string;
+  platform: string;
+  osVersion: string | null;
+  deviceInfo: DeviceInfo | null;
+  appState: Record<string, unknown> | null;
+  breadcrumbs: Breadcrumb[];
+  fingerprint: string;
+  severity: CrashSeverity;
+  userId: string | null;
+  createdAt: string;
+}
+
+/**
+ * Update crash group request schema (admin)
+ */
+export const updateCrashGroupSchema = z.object({
+  status: crashGroupStatusSchema.optional(),
+  assignedTo: z.string().max(100).nullable().optional(),
+  resolutionNotes: z.string().max(5000).nullable().optional(),
+});
+
+export type UpdateCrashGroupDto = z.infer<typeof updateCrashGroupSchema>;
+
+/**
+ * Crash group response DTO
+ */
+export interface CrashGroupDto {
+  id: string;
+  appId: string;
+  fingerprint: string;
+  errorType: string;
+  errorMessage: string;
+  occurrenceCount: number;
+  affectedUsersCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  affectedVersions: string[];
+  affectedPlatforms: string[];
+  status: CrashGroupStatus;
+  assignedTo: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * List crash groups query schema
+ */
+export const listCrashGroupsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+  status: crashGroupStatusSchema.optional(),
+  sort: z.enum(["count", "last_seen", "first_seen"]).optional().default("last_seen"),
+  order: z.enum(["asc", "desc"]).optional().default("desc"),
+});
+
+export type ListCrashGroupsQuery = z.infer<typeof listCrashGroupsQuerySchema>;
+
+/**
+ * List crash reports query schema
+ */
+export const listCrashReportsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+  groupId: z.string().optional(),
+  version: z.string().optional(),
+  severity: crashSeveritySchema.optional(),
+});
+
+export type ListCrashReportsQuery = z.infer<typeof listCrashReportsQuerySchema>;
+
+/**
+ * Crash statistics response
+ */
+export interface CrashStatsResponse {
+  /** Total crashes in the period */
+  totalCrashes: number;
+  /** Total unique crash groups */
+  totalGroups: number;
+  /** Crash-free sessions percentage (if session tracking enabled) */
+  crashFreeRate: number | null;
+  /** Crashes by day */
+  byDay: Array<{ date: string; count: number }>;
+  /** Crashes by version */
+  byVersion: Array<{ version: string; count: number }>;
+  /** Crashes by platform */
+  byPlatform: Array<{ platform: string; count: number }>;
+  /** Top crash groups by occurrence */
+  topCrashGroups: Array<{
+    id: string;
+    errorType: string;
+    errorMessage: string;
+    count: number;
+  }>;
+  /** Time period for these statistics */
+  period: {
+    start: string;
+    end: string;
+  };
 }

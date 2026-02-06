@@ -186,3 +186,195 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type DownloadEvent = typeof downloadEvents.$inferSelect;
 export type NewDownloadEvent = typeof downloadEvents.$inferInsert;
+
+// ============================================================================
+// Feedback and Crash Analytics Tables
+// ============================================================================
+
+/**
+ * Public API Keys table - for authenticating SDK requests from client apps
+ * These keys have limited permissions (only submit feedback/crashes)
+ */
+export const publicApiKeys = pgTable(
+  "public_api_keys",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull(),
+    keyPrefix: text("key_prefix").notNull(), // First 16 chars for display
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+  },
+  (table) => [
+    index("public_api_keys_app_id_idx").on(table.appId),
+    index("public_api_keys_key_hash_idx").on(table.keyHash),
+  ]
+);
+
+/**
+ * Feedback table - stores user feedback submissions from apps
+ */
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    publicKeyId: text("public_key_id")
+      .references(() => publicApiKeys.id, { onDelete: "set null" }),
+
+    // Content
+    category: text("category", { enum: ["bug", "feature", "general"] }).notNull(),
+    message: text("message").notNull(),
+    email: text("email"),
+
+    // Context
+    appVersion: text("app_version").notNull(),
+    platform: text("platform").notNull(),
+    osVersion: text("os_version"),
+    deviceInfo: text("device_info"), // JSON string
+
+    // Attachments (stored as JSON array of R2 keys)
+    attachments: text("attachments").default("[]"),
+
+    // Management
+    status: text("status", { enum: ["open", "in_progress", "closed"] })
+      .notNull()
+      .default("open"),
+    internalNotes: text("internal_notes"),
+
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("feedback_app_id_idx").on(table.appId),
+    index("feedback_status_idx").on(table.status),
+    index("feedback_category_idx").on(table.category),
+    index("feedback_app_version_idx").on(table.appVersion),
+    index("feedback_created_at_idx").on(table.createdAt),
+    index("feedback_app_status_idx").on(table.appId, table.status),
+  ]
+);
+
+/**
+ * Crash Groups table - aggregates similar crashes by fingerprint
+ */
+export const crashGroups = pgTable(
+  "crash_groups",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+
+    // Identification
+    fingerprint: text("fingerprint").notNull().unique(),
+
+    // Representative error info
+    errorType: text("error_type").notNull(),
+    errorMessage: text("error_message").notNull(),
+
+    // Statistics
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    affectedUsersCount: integer("affected_users_count").notNull().default(0),
+    firstSeenAt: timestamp("first_seen_at", { mode: "date" }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "date" }).notNull(),
+
+    // Affected versions/platforms (JSON arrays)
+    affectedVersions: text("affected_versions").default("[]"),
+    affectedPlatforms: text("affected_platforms").default("[]"),
+
+    // Management
+    status: text("status", { enum: ["new", "investigating", "resolved", "ignored"] })
+      .notNull()
+      .default("new"),
+    assignedTo: text("assigned_to"),
+    resolutionNotes: text("resolution_notes"),
+    resolvedAt: timestamp("resolved_at", { mode: "date" }),
+
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("crash_groups_app_id_idx").on(table.appId),
+    index("crash_groups_fingerprint_idx").on(table.fingerprint),
+    index("crash_groups_status_idx").on(table.status),
+    index("crash_groups_last_seen_idx").on(table.lastSeenAt),
+    index("crash_groups_count_idx").on(table.occurrenceCount),
+    index("crash_groups_app_status_idx").on(table.appId, table.status),
+  ]
+);
+
+/**
+ * Crash Reports table - individual crash occurrences
+ */
+export const crashReports = pgTable(
+  "crash_reports",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    crashGroupId: text("crash_group_id")
+      .references(() => crashGroups.id, { onDelete: "set null" }),
+    publicKeyId: text("public_key_id")
+      .references(() => publicApiKeys.id, { onDelete: "set null" }),
+
+    // Error details
+    errorType: text("error_type").notNull(),
+    errorMessage: text("error_message").notNull(),
+    stackTrace: text("stack_trace").notNull(), // JSON array of stack frames
+
+    // Context
+    appVersion: text("app_version").notNull(),
+    platform: text("platform").notNull(),
+    osVersion: text("os_version"),
+    deviceInfo: text("device_info"), // JSON string
+    appState: text("app_state"), // JSON string - custom state at crash time
+    breadcrumbs: text("breadcrumbs").default("[]"), // JSON array
+
+    // Metadata
+    fingerprint: text("fingerprint").notNull(),
+    severity: text("severity", { enum: ["warning", "error", "fatal"] })
+      .notNull()
+      .default("error"),
+    userId: text("user_id"), // Optional user identifier
+
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("crash_reports_app_id_idx").on(table.appId),
+    index("crash_reports_group_id_idx").on(table.crashGroupId),
+    index("crash_reports_fingerprint_idx").on(table.fingerprint),
+    index("crash_reports_app_version_idx").on(table.appVersion),
+    index("crash_reports_created_at_idx").on(table.createdAt),
+    index("crash_reports_app_created_idx").on(table.appId, table.createdAt),
+  ]
+);
+
+// Type exports for feedback and crash analytics
+export type PublicApiKey = typeof publicApiKeys.$inferSelect;
+export type NewPublicApiKey = typeof publicApiKeys.$inferInsert;
+export type Feedback = typeof feedback.$inferSelect;
+export type NewFeedback = typeof feedback.$inferInsert;
+export type CrashGroup = typeof crashGroups.$inferSelect;
+export type NewCrashGroup = typeof crashGroups.$inferInsert;
+export type CrashReport = typeof crashReports.$inferSelect;
+export type NewCrashReport = typeof crashReports.$inferInsert;

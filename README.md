@@ -11,8 +11,11 @@ A self-hosted update server for Tauri applications, featuring a Hono backend, Po
 - **R2 Storage** - Cloudflare R2 integration with presigned URLs
 - **Admin Dashboard** - Next.js dashboard for managing apps and releases
 - **Analytics** - Download tracking with time-series data
+- **Feedback Collection** - Collect user feedback (bugs, features, general) from your apps
+- **Crash Analytics** - Automatic crash reporting with grouping and fingerprinting
+- **TypeScript SDK** - `@oasis/sdk` for easy integration into your applications
 - **Rate Limiting** - Configurable rate limits for all endpoints
-- **API Key Authentication** - Scoped API keys (admin, CI)
+- **API Key Authentication** - Scoped API keys (admin, CI, SDK)
 
 ## Architecture
 
@@ -28,11 +31,19 @@ oasis/
 │   │   └── utils/        # Utilities (semver, response helpers)
 │   └── package.json
 │
-└── dashboard/      # Next.js admin UI
+├── dashboard/      # Next.js admin UI
+│   ├── src/
+│   │   ├── app/          # Next.js App Router pages
+│   │   ├── components/   # UI components
+│   │   └── lib/          # API client, types
+│   └── package.json
+│
+└── sdk/            # TypeScript SDK for apps
     ├── src/
-    │   ├── app/          # Next.js App Router pages
-    │   ├── components/   # UI components
-    │   └── lib/          # API client, types
+    │   ├── feedback.ts   # Feedback submission
+    │   ├── crashes.ts    # Crash reporting
+    │   ├── breadcrumbs.ts # Event breadcrumbs
+    │   └── queue.ts      # Offline event queue
     └── package.json
 ```
 
@@ -189,6 +200,45 @@ Authorization: Bearer uk_live_xxx
 | GET | `/admin/apps/:id/analytics` | Get download statistics |
 | GET | `/admin/apps/:id/analytics/timeseries` | Get time-series data |
 
+#### SDK Keys (Public API Keys)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/apps/:id/public-keys` | List SDK keys |
+| POST | `/admin/apps/:id/public-keys` | Create SDK key |
+| DELETE | `/admin/apps/:id/public-keys/:kid` | Revoke SDK key |
+
+#### Feedback
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/apps/:id/feedback` | List feedback (filterable) |
+| GET | `/admin/apps/:id/feedback/:fid` | Get feedback details |
+| PATCH | `/admin/apps/:id/feedback/:fid` | Update feedback status |
+| DELETE | `/admin/apps/:id/feedback/:fid` | Delete feedback |
+| GET | `/admin/apps/:id/feedback/stats` | Get feedback statistics |
+
+#### Crash Analytics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/apps/:id/crashes` | List crash reports |
+| GET | `/admin/apps/:id/crashes/:cid` | Get crash report details |
+| GET | `/admin/apps/:id/crashes/groups` | List crash groups |
+| GET | `/admin/apps/:id/crashes/groups/:gid` | Get crash group details |
+| PATCH | `/admin/apps/:id/crashes/groups/:gid` | Update crash group status |
+| GET | `/admin/apps/:id/crashes/groups/:gid/reports` | Get reports for group |
+| GET | `/admin/apps/:id/crashes/stats` | Get crash statistics |
+
+### SDK Endpoints
+
+SDK endpoints are used by the `@oasis/sdk` package to submit feedback and crash reports. They require a public SDK key (`pk_*` prefix).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/sdk/:app_slug/feedback` | Submit user feedback |
+| POST | `/sdk/:app_slug/crashes` | Submit crash report |
+
 ### CI Endpoints
 
 CI endpoints require a CI-scoped or admin-scoped API key.
@@ -270,6 +320,53 @@ jobs:
             }' \
             ${{ secrets.OASIS_URL }}/ci/apps/my-app/releases
 ```
+
+## SDK Integration (Feedback & Crash Reporting)
+
+The `@oasis/sdk` package enables collecting user feedback and crash reports from your application.
+
+### Installation
+
+```bash
+npm install @oasis/sdk
+```
+
+### Setup
+
+1. Create an SDK key in the Oasis dashboard under your app's "SDK Keys" section
+2. Initialize the SDK in your application:
+
+```typescript
+import { initOasis } from '@oasis/sdk';
+
+const oasis = initOasis({
+  apiKey: 'pk_my-app_a1b2c3d4e5f6g7h8',  // Your SDK key
+  serverUrl: 'https://your-oasis-server.com',
+  appVersion: '1.2.3',
+  enableAutoCrashReporting: true,  // Auto-capture uncaught errors
+});
+
+// Submit feedback
+await oasis.feedback.reportBug('The save button does not work');
+await oasis.feedback.requestFeature('Add dark mode support');
+
+// Manual crash reporting
+try {
+  riskyOperation();
+} catch (error) {
+  oasis.crashes.captureException(error);
+}
+```
+
+### Features
+
+- **Feedback Categories**: Bug reports, feature requests, and general feedback
+- **Automatic Crash Capture**: Uncaught errors and promise rejections
+- **Breadcrumbs**: Automatic tracking of navigation, clicks, and network requests
+- **Offline Support**: Events are queued and sent when connectivity is restored
+- **Device Info**: Automatic collection of platform, OS, screen size, etc.
+
+For complete SDK documentation, see the [SDK README](./sdk/README.md).
 
 ## Tauri Configuration
 

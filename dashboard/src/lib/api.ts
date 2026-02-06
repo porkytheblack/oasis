@@ -698,3 +698,260 @@ export function getErrorMessage(error: unknown): string {
   }
   return "An unexpected error occurred";
 }
+
+// =============================================================================
+// Public API Keys API
+// =============================================================================
+
+import type {
+  PublicApiKey,
+  CreatePublicApiKeyRequest,
+  CreatePublicApiKeyResponse,
+  Feedback,
+  UpdateFeedbackRequest,
+  ListFeedbackParams,
+  FeedbackStats,
+  CrashGroup,
+  CrashReport,
+  UpdateCrashGroupRequest,
+  ListCrashGroupsParams,
+  ListCrashReportsParams,
+  CrashStats,
+} from "./types";
+
+/**
+ * Fetches all public API keys for an app.
+ */
+export async function getPublicApiKeys(appId: string): Promise<PublicApiKey[]> {
+  const response = await apiClient.get<{ success: boolean; data: PaginatedResponse<PublicApiKey> }>(
+    `/admin/apps/${appId}/public-keys`
+  );
+  return extractPaginatedItems(response);
+}
+
+/**
+ * Creates a new public API key for an app.
+ * The full key is returned only once in the response.
+ */
+export async function createPublicApiKey(
+  appId: string,
+  data: CreatePublicApiKeyRequest
+): Promise<CreatePublicApiKeyResponse> {
+  const response = await apiClient.post<{ success: boolean; data: CreatePublicApiKeyResponse }>(
+    `/admin/apps/${appId}/public-keys`,
+    data
+  );
+  return extractData(response);
+}
+
+/**
+ * Revokes a public API key.
+ */
+export async function revokePublicApiKey(
+  appId: string,
+  keyId: string
+): Promise<PublicApiKey> {
+  const response = await apiClient.delete<{ success: boolean; data: PublicApiKey }>(
+    `/admin/apps/${appId}/public-keys/${keyId}`
+  );
+  return extractData(response);
+}
+
+// =============================================================================
+// Feedback API
+// =============================================================================
+
+/**
+ * Fetches feedback for an app with optional filtering.
+ */
+export async function getFeedback(
+  appId: string,
+  params?: ListFeedbackParams
+): Promise<PaginatedResponse<Feedback>> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  if (params?.status) queryParams.set("status", params.status);
+  if (params?.category) queryParams.set("category", params.category);
+  if (params?.version) queryParams.set("version", params.version);
+  if (params?.search) queryParams.set("search", params.search);
+
+  const query = queryParams.toString();
+  const response = await apiClient.get<{ success: boolean; data: PaginatedResponse<Feedback> }>(
+    `/admin/apps/${appId}/feedback${query ? `?${query}` : ""}`
+  );
+  return extractPaginatedData(response);
+}
+
+/**
+ * Fetches a single feedback item by ID.
+ */
+export async function getFeedbackById(
+  appId: string,
+  feedbackId: string
+): Promise<Feedback> {
+  const response = await apiClient.get<{ success: boolean; data: Feedback }>(
+    `/admin/apps/${appId}/feedback/${feedbackId}`
+  );
+  return extractData(response);
+}
+
+/**
+ * Updates a feedback item.
+ */
+export async function updateFeedback(
+  appId: string,
+  feedbackId: string,
+  data: UpdateFeedbackRequest
+): Promise<Feedback> {
+  const response = await apiClient.patch<{ success: boolean; data: Feedback }>(
+    `/admin/apps/${appId}/feedback/${feedbackId}`,
+    data
+  );
+  return extractData(response);
+}
+
+/**
+ * Deletes a feedback item.
+ */
+export async function deleteFeedback(
+  appId: string,
+  feedbackId: string
+): Promise<void> {
+  await apiClient.delete(`/admin/apps/${appId}/feedback/${feedbackId}`);
+}
+
+/**
+ * Fetches feedback statistics for an app.
+ */
+export async function getFeedbackStats(appId: string): Promise<FeedbackStats> {
+  const response = await apiClient.get<{ success: boolean; data: FeedbackStats }>(
+    `/admin/apps/${appId}/feedback/stats`
+  );
+  return extractData(response);
+}
+
+/**
+ * Fetches versions that have submitted feedback.
+ */
+export async function getFeedbackVersions(appId: string): Promise<string[]> {
+  const response = await apiClient.get<{ success: boolean; data: { versions: string[] } }>(
+    `/admin/apps/${appId}/feedback/versions`
+  );
+  return extractData(response).versions;
+}
+
+// =============================================================================
+// Crash Analytics API
+// =============================================================================
+
+/**
+ * Fetches crash statistics for an app.
+ */
+export async function getCrashStats(
+  appId: string,
+  period: "24h" | "7d" | "30d" | "90d" = "7d"
+): Promise<CrashStats> {
+  const response = await apiClient.get<{ success: boolean; data: CrashStats }>(
+    `/admin/apps/${appId}/crashes/stats?period=${period}`
+  );
+  return extractData(response);
+}
+
+/**
+ * Fetches crash groups for an app.
+ */
+export async function getCrashGroups(
+  appId: string,
+  params?: ListCrashGroupsParams
+): Promise<PaginatedResponse<CrashGroup>> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  if (params?.status) queryParams.set("status", params.status);
+  if (params?.sort) queryParams.set("sort", params.sort);
+  if (params?.order) queryParams.set("order", params.order);
+
+  const query = queryParams.toString();
+  const response = await apiClient.get<{ success: boolean; data: PaginatedResponse<CrashGroup> }>(
+    `/admin/apps/${appId}/crashes/groups${query ? `?${query}` : ""}`
+  );
+  return extractPaginatedData(response);
+}
+
+/**
+ * Fetches a single crash group by ID.
+ */
+export async function getCrashGroupById(
+  appId: string,
+  groupId: string
+): Promise<CrashGroup> {
+  const response = await apiClient.get<{ success: boolean; data: CrashGroup }>(
+    `/admin/apps/${appId}/crashes/groups/${groupId}`
+  );
+  return extractData(response);
+}
+
+/**
+ * Updates a crash group.
+ */
+export async function updateCrashGroup(
+  appId: string,
+  groupId: string,
+  data: UpdateCrashGroupRequest
+): Promise<CrashGroup> {
+  const response = await apiClient.patch<{ success: boolean; data: CrashGroup }>(
+    `/admin/apps/${appId}/crashes/groups/${groupId}`,
+    data
+  );
+  return extractData(response);
+}
+
+/**
+ * Fetches crash reports for an app.
+ */
+export async function getCrashReports(
+  appId: string,
+  params?: ListCrashReportsParams
+): Promise<PaginatedResponse<CrashReport>> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  if (params?.groupId) queryParams.set("groupId", params.groupId);
+  if (params?.version) queryParams.set("version", params.version);
+  if (params?.severity) queryParams.set("severity", params.severity);
+
+  const query = queryParams.toString();
+  const response = await apiClient.get<{ success: boolean; data: PaginatedResponse<CrashReport> }>(
+    `/admin/apps/${appId}/crashes${query ? `?${query}` : ""}`
+  );
+  return extractPaginatedData(response);
+}
+
+/**
+ * Fetches a single crash report by ID.
+ */
+export async function getCrashReportById(
+  appId: string,
+  crashId: string
+): Promise<CrashReport> {
+  const response = await apiClient.get<{ success: boolean; data: CrashReport }>(
+    `/admin/apps/${appId}/crashes/${crashId}`
+  );
+  return extractData(response);
+}
+
+/**
+ * Fetches crash reports for a specific group.
+ */
+export async function getCrashReportsForGroup(
+  appId: string,
+  groupId: string,
+  page = 1,
+  limit = 20
+): Promise<PaginatedResponse<CrashReport>> {
+  const response = await apiClient.get<{ success: boolean; data: PaginatedResponse<CrashReport> }>(
+    `/admin/apps/${appId}/crashes/groups/${groupId}/reports?page=${page}&limit=${limit}`
+  );
+  return extractPaginatedData(response);
+}

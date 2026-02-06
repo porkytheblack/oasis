@@ -24,8 +24,8 @@ on:
         default: "artifacts"
         type: string
       tauri_script:
-        description: "Command used to run the Tauri CLI"
-        default: "pnpm tauri"
+        description: "Command used to run the Tauri CLI (leave empty to auto-detect based on package manager)"
+        default: ""
         type: string
       build_matrix:
         description: "JSON matrix to control platforms and bundle targets"
@@ -165,17 +165,51 @@ jobs:
             patchelf \
             libssl-dev
 
+      - name: Detect package manager
+        id: detect_pm
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          APP_DIR="${{ inputs.app_dir }}"
+          if [ -f "$APP_DIR/pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "lockfile=$APP_DIR/pnpm-lock.yaml" >> $GITHUB_OUTPUT
+            echo "install_cmd=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "tauri_cmd=pnpm tauri" >> $GITHUB_OUTPUT
+            echo "Detected pnpm (pnpm-lock.yaml found)"
+          elif [ -f "$APP_DIR/yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "lockfile=$APP_DIR/yarn.lock" >> $GITHUB_OUTPUT
+            echo "install_cmd=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "tauri_cmd=yarn tauri" >> $GITHUB_OUTPUT
+            echo "Detected yarn (yarn.lock found)"
+          elif [ -f "$APP_DIR/package-lock.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "lockfile=$APP_DIR/package-lock.json" >> $GITHUB_OUTPUT
+            echo "install_cmd=npm ci" >> $GITHUB_OUTPUT
+            echo "tauri_cmd=npm run tauri" >> $GITHUB_OUTPUT
+            echo "Detected npm (package-lock.json found)"
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "lockfile=" >> $GITHUB_OUTPUT
+            echo "install_cmd=npm install" >> $GITHUB_OUTPUT
+            echo "tauri_cmd=npm run tauri" >> $GITHUB_OUTPUT
+            echo "No lockfile found, defaulting to npm"
+          fi
+
       - name: Setup pnpm
+        if: steps.detect_pm.outputs.manager == 'pnpm'
         uses: pnpm/action-setup@v4
         with:
           version: 9
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "pnpm"
-          cache-dependency-path: ${{ inputs.app_dir }}/pnpm-lock.yaml
+          cache: ${{ steps.detect_pm.outputs.manager }}
+          cache-dependency-path: ${{ steps.detect_pm.outputs.lockfile }}
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -189,7 +223,7 @@ jobs:
           shared-key: ${{ matrix.target }}
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+        run: ${{ steps.detect_pm.outputs.install_cmd }}
 
       - name: Download FFmpeg (macOS)
         if: matrix.platform == 'macos-latest'
@@ -259,7 +293,7 @@ jobs:
         with:
           projectPath: ${{ inputs.app_dir }}
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundle_targets }}
-          tauriScript: ${{ inputs.tauri_script }}
+          tauriScript: ${{ inputs.tauri_script || steps.detect_pm.outputs.tauri_cmd }}
 
       - name: Collect build artifacts (macOS)
         if: matrix.platform == 'macos-latest'

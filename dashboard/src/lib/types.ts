@@ -462,3 +462,258 @@ export interface AppDownloadSummary {
   /** Downloads broken down by platform */
   byPlatform: PlatformDownloadStats[];
 }
+
+// =============================================================================
+// Feedback Types
+// =============================================================================
+
+/**
+ * Feedback category types.
+ */
+export type FeedbackCategory = "bug" | "feature" | "general";
+
+/**
+ * Feedback status types.
+ */
+export type FeedbackStatus = "open" | "in_progress" | "closed";
+
+/**
+ * Device info for feedback/crash context.
+ */
+export interface DeviceInfo {
+  model?: string;
+  manufacturer?: string;
+  cpuCores?: number;
+  memoryTotal?: number;
+  memoryFree?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  pixelRatio?: number;
+  userAgent?: string;
+  locale?: string;
+  timezone?: string;
+}
+
+/**
+ * Attachment for feedback.
+ */
+export interface Attachment {
+  r2Key: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/**
+ * Feedback entity representing user feedback submission.
+ */
+export interface Feedback {
+  id: string;
+  appId: string;
+  category: FeedbackCategory;
+  message: string;
+  email: string | null;
+  appVersion: string;
+  platform: string;
+  osVersion: string | null;
+  deviceInfo: DeviceInfo | null;
+  attachments: Attachment[];
+  status: FeedbackStatus;
+  internalNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request payload for updating feedback.
+ */
+export interface UpdateFeedbackRequest {
+  status?: FeedbackStatus;
+  internalNotes?: string | null;
+}
+
+/**
+ * Query parameters for listing feedback.
+ */
+export interface ListFeedbackParams {
+  page?: number;
+  limit?: number;
+  status?: FeedbackStatus;
+  category?: FeedbackCategory;
+  version?: string;
+  search?: string;
+}
+
+/**
+ * Feedback statistics.
+ */
+export interface FeedbackStats {
+  total: number;
+  byStatus: Record<FeedbackStatus, number>;
+  byCategory: Record<FeedbackCategory, number>;
+}
+
+// =============================================================================
+// Crash Analytics Types
+// =============================================================================
+
+/**
+ * Crash group status types.
+ */
+export type CrashGroupStatus = "new" | "investigating" | "resolved" | "ignored";
+
+/**
+ * Crash severity types.
+ */
+export type CrashSeverity = "warning" | "error" | "fatal";
+
+/**
+ * Stack frame in a crash report.
+ */
+export interface StackFrame {
+  file?: string;
+  line?: number;
+  column?: number;
+  function?: string;
+  isNative?: boolean;
+}
+
+/**
+ * Breadcrumb for crash context.
+ */
+export interface Breadcrumb {
+  type: string;
+  message: string;
+  timestamp: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Crash group entity representing aggregated similar crashes.
+ */
+export interface CrashGroup {
+  id: string;
+  appId: string;
+  fingerprint: string;
+  errorType: string;
+  errorMessage: string;
+  occurrenceCount: number;
+  affectedUsersCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  affectedVersions: string[];
+  affectedPlatforms: string[];
+  status: CrashGroupStatus;
+  assignedTo: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Individual crash report entity.
+ */
+export interface CrashReport {
+  id: string;
+  appId: string;
+  crashGroupId: string | null;
+  errorType: string;
+  errorMessage: string;
+  stackTrace: StackFrame[];
+  appVersion: string;
+  platform: string;
+  osVersion: string | null;
+  deviceInfo: DeviceInfo | null;
+  appState: Record<string, unknown> | null;
+  breadcrumbs: Breadcrumb[];
+  fingerprint: string;
+  severity: CrashSeverity;
+  userId: string | null;
+  createdAt: string;
+}
+
+/**
+ * Request payload for updating a crash group.
+ */
+export interface UpdateCrashGroupRequest {
+  status?: CrashGroupStatus;
+  assignedTo?: string | null;
+  resolutionNotes?: string | null;
+}
+
+/**
+ * Query parameters for listing crash groups.
+ */
+export interface ListCrashGroupsParams {
+  page?: number;
+  limit?: number;
+  status?: CrashGroupStatus;
+  sort?: "count" | "last_seen" | "first_seen";
+  order?: "asc" | "desc";
+}
+
+/**
+ * Query parameters for listing crash reports.
+ */
+export interface ListCrashReportsParams {
+  page?: number;
+  limit?: number;
+  groupId?: string;
+  version?: string;
+  severity?: CrashSeverity;
+}
+
+/**
+ * Crash statistics response.
+ */
+export interface CrashStats {
+  totalCrashes: number;
+  totalGroups: number;
+  crashFreeRate: number | null;
+  byDay: Array<{ date: string; count: number }>;
+  byVersion: Array<{ version: string; count: number }>;
+  byPlatform: Array<{ platform: string; count: number }>;
+  topCrashGroups: Array<{
+    id: string;
+    errorType: string;
+    errorMessage: string;
+    count: number;
+  }>;
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+// =============================================================================
+// Public API Key Types
+// =============================================================================
+
+/**
+ * Public API key entity for SDK authentication.
+ */
+export interface PublicApiKey {
+  id: string;
+  appId: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+/**
+ * Request payload for creating a public API key.
+ */
+export interface CreatePublicApiKeyRequest {
+  name: string;
+}
+
+/**
+ * Response from creating a public API key (includes full key, shown only once).
+ */
+export interface CreatePublicApiKeyResponse {
+  key: string;
+  publicApiKey: PublicApiKey;
+}

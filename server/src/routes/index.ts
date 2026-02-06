@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { publicRoutes } from "./public.js";
 import { adminRoutes } from "./admin/index.js";
 import { ciRoutes } from "./ci/index.js";
+import { sdkRoutes } from "./sdk.js";
 import { healthRoutes } from "./health.js";
 import { publicRateLimiter } from "../middleware/rate-limit.js";
 
@@ -28,6 +29,11 @@ routes.route("/admin", adminRoutes);
 // CI routes require authentication with CI or admin scope
 // CI routes have their own rate limiting applied
 routes.route("/ci", ciRoutes);
+
+// Mount SDK routes under /sdk prefix
+// SDK routes require authentication with public API key (pk_*)
+// Used by @oasis/sdk for feedback and crash reporting
+routes.route("/sdk", sdkRoutes);
 
 // Apply rate limiting to public update endpoints
 // Rate limits are applied per IP address
