@@ -270,6 +270,9 @@ jobs:
       - name: Collect build artifacts (macOS)
         if: matrix.platform == 'macos-latest'
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           ARTIFACTS_DIR="../${{ inputs.artifacts_dir }}"
           mkdir -p "$ARTIFACTS_DIR/installers"
@@ -291,20 +294,45 @@ jobs:
             echo "Warning: No DMG found in $TARGET_DIR/dmg"
           fi
 
+          TARBALL="$ARTIFACTS_DIR/updates/${PREFIX}_${VERSION}_${PLATFORM}.app.tar.gz"
+
           UPDATE_FILE=$(find "$TARGET_DIR/macos" -name "*.app.tar.gz" -type f 2>/dev/null | head -1)
           if [ -n "$UPDATE_FILE" ] && [ -f "$UPDATE_FILE" ]; then
-            cp "$UPDATE_FILE" "$ARTIFACTS_DIR/updates/${PREFIX}_${VERSION}_${PLATFORM}.app.tar.gz"
-            echo "Found update bundle: $UPDATE_FILE"
+            cp "$UPDATE_FILE" "$TARBALL"
+            echo "Found pre-built update bundle: $UPDATE_FILE"
           else
-            echo "Warning: No .app.tar.gz found in $TARGET_DIR/macos"
+            echo "No pre-built .app.tar.gz found, creating manually..."
+            APP_DIR=$(find "$TARGET_DIR/macos" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ]; then
+              APP_NAME=$(basename "$APP_DIR")
+              echo "Creating tar.gz archive of $APP_NAME..."
+              tar -czvf "$TARBALL" -C "$(dirname "$APP_DIR")" "$APP_NAME"
+              echo "Created update bundle: $TARBALL"
+            else
+              echo "ERROR: No .app bundle found in $TARGET_DIR/macos to create update bundle"
+              exit 1
+            fi
           fi
 
           SIG_FILE=$(find "$TARGET_DIR/macos" -name "*.app.tar.gz.sig" -type f 2>/dev/null | head -1)
           if [ -n "$SIG_FILE" ] && [ -f "$SIG_FILE" ]; then
-            cp "$SIG_FILE" "$ARTIFACTS_DIR/updates/${PREFIX}_${VERSION}_${PLATFORM}.app.tar.gz.sig"
-            echo "Found update signature: $SIG_FILE"
+            cp "$SIG_FILE" "${TARBALL}.sig"
+            echo "Found pre-built update signature: $SIG_FILE"
           else
-            echo "Warning: No .app.tar.gz.sig found"
+            echo "No pre-built signature found, signing manually..."
+            if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+              npx --yes @tauri-apps/cli signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TARBALL"
+            else
+              npx --yes @tauri-apps/cli signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" "$TARBALL"
+            fi
+
+            if [ -f "${TARBALL}.sig" ]; then
+              echo "Successfully created and signed update bundle"
+              ls -la "${TARBALL}"*
+            else
+              echo "ERROR: Failed to sign tarball"
+              exit 1
+            fi
           fi
 
           echo "=== Collected artifacts ==="
@@ -376,6 +404,9 @@ jobs:
       - name: Collect build artifacts (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $artifactsDir = "../${{ inputs.artifacts_dir }}"
           New-Item -ItemType Directory -Force -Path "$artifactsDir/installers"
@@ -389,28 +420,50 @@ jobs:
           Write-Host "=== Listing all bundle contents ==="
           Get-ChildItem -Path $targetDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
 
-          $nsisPath = Get-ChildItem -Path "$targetDir/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($nsisPath) {
-            Copy-Item $nsisPath.FullName -Destination "$artifactsDir/installers/${prefix}_${version}_${platform}-setup.exe"
-            Write-Host "Found NSIS installer: $($nsisPath.FullName)"
+          $nsisExe = Get-ChildItem -Path "$targetDir/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nsisExe) {
+            Copy-Item $nsisExe.FullName -Destination "$artifactsDir/installers/${prefix}_${version}_${platform}-setup.exe"
+            Write-Host "Found NSIS installer: $($nsisExe.FullName)"
           } else {
             Write-Host "Warning: No .exe found in $targetDir/nsis"
           }
 
+          $zipPath = "$artifactsDir/updates/${prefix}_${version}_${platform}.nsis.zip"
+
           $updateZip = Get-ChildItem -Path "$targetDir/nsis" -Filter "*.nsis.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($updateZip) {
-            Copy-Item $updateZip.FullName -Destination "$artifactsDir/updates/${prefix}_${version}_${platform}.nsis.zip"
-            Write-Host "Found update zip: $($updateZip.FullName)"
+            Copy-Item $updateZip.FullName -Destination $zipPath
+            Write-Host "Found pre-built update zip: $($updateZip.FullName)"
           } else {
-            Write-Host "Warning: No .nsis.zip found in $targetDir/nsis"
+            Write-Host "No pre-built .nsis.zip found, creating manually..."
+            if ($nsisExe) {
+              Compress-Archive -Path $nsisExe.FullName -DestinationPath $zipPath
+              Write-Host "Created update zip: $zipPath"
+            } else {
+              Write-Host "ERROR: No NSIS installer found to create update bundle"
+              exit 1
+            }
           }
 
           $updateSig = Get-ChildItem -Path "$targetDir/nsis" -Filter "*.nsis.zip.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($updateSig) {
-            Copy-Item $updateSig.FullName -Destination "$artifactsDir/updates/${prefix}_${version}_${platform}.nsis.zip.sig"
-            Write-Host "Found update signature: $($updateSig.FullName)"
+            Copy-Item $updateSig.FullName -Destination "$zipPath.sig"
+            Write-Host "Found pre-built update signature: $($updateSig.FullName)"
           } else {
-            Write-Host "Warning: No .nsis.zip.sig found"
+            Write-Host "No pre-built signature found, signing manually..."
+            if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+              npx --yes @tauri-apps/cli signer sign -k "$env:TAURI_SIGNING_PRIVATE_KEY" -p "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$zipPath"
+            } else {
+              npx --yes @tauri-apps/cli signer sign -k "$env:TAURI_SIGNING_PRIVATE_KEY" "$zipPath"
+            }
+
+            if (Test-Path "$zipPath.sig") {
+              Write-Host "Successfully created and signed update bundle"
+              Get-ChildItem "$zipPath*"
+            } else {
+              Write-Host "ERROR: Failed to sign zip"
+              exit 1
+            }
           }
 
           Write-Host "=== Collected artifacts ==="
