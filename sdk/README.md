@@ -1,21 +1,21 @@
-# @oasis/sdk
+# oasis-sdk
 
 TypeScript SDK for Oasis - Feedback and Crash Analytics for Tauri applications.
 
 ## Installation
 
 ```bash
-npm install @oasis/sdk
+npm install oasis-sdk
 # or
-yarn add @oasis/sdk
+yarn add oasis-sdk
 # or
-pnpm add @oasis/sdk
+pnpm add oasis-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { initOasis } from '@oasis/sdk';
+import { initOasis } from 'oasis-sdk';
 
 // Initialize the SDK
 const oasis = initOasis({

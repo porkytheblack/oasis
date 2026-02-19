@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { initOasis } from '@oasis/sdk';
+ * import { initOasis } from 'oasis-sdk';
  *
  * const oasis = initOasis({
  *   apiKey: 'pk_my-app_a1b2c3d4e5f6g7h8',

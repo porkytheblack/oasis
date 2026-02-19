@@ -27,7 +27,6 @@ export function detectPlatform(): string {
   // Browser/Node.js detection
   if (typeof navigator !== "undefined") {
     const ua = navigator.userAgent.toLowerCase();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
     const platformStr = (navigator.platform ?? "").toLowerCase();
 
     // Detect OS

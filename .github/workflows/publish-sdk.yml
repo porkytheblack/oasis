@@ -1,0 +1,140 @@
+name: Publish SDK
+
+on:
+  push:
+    tags:
+      - 'sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip npm publish)'
+        required: false
+        default: false
+        type: boolean
+
+defaults:
+  run:
+    working-directory: sdk
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify package contents
+        run: |
+          npm pack --dry-run
+          echo ""
+          echo "=== Package contents ==="
+          npm pack --dry-run 2>&1 | grep -E "^npm notice [0-9]" || true
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#sdk-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Version from tag: $VERSION"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Version from package.json: $VERSION"
+          fi
+
+      - name: Verify version matches package.json
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: Version mismatch!"
+            echo "  package.json version: $PKG_VERSION"
+            echo "  Tag version: $TAG_VERSION"
+            echo ""
+            echo "Please update package.json version to match the tag."
+            exit 1
+          fi
+
+          echo "Version verified: $PKG_VERSION"
+
+      - name: Publish to npm (dry run)
+        if: inputs.dry_run == true
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        if: inputs.dry_run != true
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag' && inputs.dry_run != true
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SDK v${{ steps.version.outputs.version }}"
+          body: |
+            ## oasis-sdk v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            ```bash
+            npm install oasis-sdk@${{ steps.version.outputs.version }}
+            ```
+
+            ### Links
+
+            - [npm package](https://www.npmjs.com/package/oasis-sdk)
+            - [Documentation](https://github.com/porkytheblack/oasis/tree/main/sdk#readme)
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
