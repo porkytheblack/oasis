@@ -1,10 +1,15 @@
+---
+name: oasis-setup
+description: Guide for integrating Oasis into Tauri apps. Use when the user wants to set up Oasis SDK, configure auto-updates, add crash reporting, collect user feedback, or create a release workflow for their Tauri application.
+---
+
 # Oasis Integration Setup
 
 Help the user integrate Oasis into their Tauri application.
 
 ## Instructions
 
-Read the full integration guide at `integration-guide.md` (in this skill directory) and help the user with:
+Read the full integration guide at `references/integration-guide.md` and help the user with:
 
 1. **SDK Installation & Setup**
    - Install `oasis-sdk` package
@@ -29,7 +34,7 @@ Read the full integration guide at `integration-guide.md` (in this skill directo
 
 ## Key Files to Reference
 
-- Integration guide: `integration-guide.md` (in this skill directory)
+- Integration guide: `references/integration-guide.md`
 - Reusable workflow: `.github/workflows/tauri-release.yml`
 - SDK source: `sdk/src/index.ts`
 - SDK types: `sdk/src/types.ts`
