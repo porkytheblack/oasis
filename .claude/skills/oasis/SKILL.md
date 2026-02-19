@@ -52,18 +52,110 @@ const oasis = initOasis({
 
 The `apiKey` must start with `pk_` and follow the format `pk_<app-slug>_<random>`. The app slug is extracted automatically from the key.
 
+### Environment Variables
+
+The API key and server URL should be loaded from environment variables, never hardcoded. The variable naming and access pattern depends on the frontend framework:
+
+**Vite (Tauri default, SvelteKit, etc.):**
+
+```bash
+# .env
+VITE_OASIS_API_KEY=pk_my-app_a1b2c3d4e5f6g7h8
+VITE_OASIS_SERVER_URL=https://updates.myapp.com
+```
+
+```typescript
+const oasis = initOasis({
+  apiKey: import.meta.env.VITE_OASIS_API_KEY,
+  serverUrl: import.meta.env.VITE_OASIS_SERVER_URL,
+  appVersion: "1.0.0",
+  enableAutoCrashReporting: true,
+});
+```
+
+**Next.js:**
+
+```bash
+# .env.local
+NEXT_PUBLIC_OASIS_API_KEY=pk_my-app_a1b2c3d4e5f6g7h8
+NEXT_PUBLIC_OASIS_SERVER_URL=https://updates.myapp.com
+```
+
+```typescript
+const oasis = initOasis({
+  apiKey: process.env.NEXT_PUBLIC_OASIS_API_KEY!,
+  serverUrl: process.env.NEXT_PUBLIC_OASIS_SERVER_URL!,
+  appVersion: "1.0.0",
+  enableAutoCrashReporting: true,
+});
+```
+
+**Create React App:**
+
+```bash
+# .env
+REACT_APP_OASIS_API_KEY=pk_my-app_a1b2c3d4e5f6g7h8
+REACT_APP_OASIS_SERVER_URL=https://updates.myapp.com
+```
+
+```typescript
+const oasis = initOasis({
+  apiKey: process.env.REACT_APP_OASIS_API_KEY!,
+  serverUrl: process.env.REACT_APP_OASIS_SERVER_URL!,
+  appVersion: "1.0.0",
+  enableAutoCrashReporting: true,
+});
+```
+
+**Nuxt 3:**
+
+```bash
+# .env
+NUXT_PUBLIC_OASIS_API_KEY=pk_my-app_a1b2c3d4e5f6g7h8
+NUXT_PUBLIC_OASIS_SERVER_URL=https://updates.myapp.com
+```
+
+```typescript
+const config = useRuntimeConfig();
+const oasis = initOasis({
+  apiKey: config.public.oasisApiKey,
+  serverUrl: config.public.oasisServerUrl,
+  appVersion: "1.0.0",
+  enableAutoCrashReporting: true,
+});
+```
+
+**Plain TypeScript / No framework (direct env):**
+
+```bash
+# .env
+OASIS_API_KEY=pk_my-app_a1b2c3d4e5f6g7h8
+OASIS_SERVER_URL=https://updates.myapp.com
+```
+
+```typescript
+const oasis = initOasis({
+  apiKey: process.env.OASIS_API_KEY!,
+  serverUrl: process.env.OASIS_SERVER_URL!,
+  appVersion: "1.0.0",
+  enableAutoCrashReporting: true,
+});
+```
+
+When creating the initialization file, detect the user's framework from their project config (`vite.config.*`, `next.config.*`, `nuxt.config.*`, `package.json` scripts) and use the matching env variable convention. Always add the env variables to `.env.example` (or the relevant env file) and remind the user to set the actual values.
+
 ### Tauri Integration Pattern
 
-In a typical Tauri + React/Svelte/Vue app, initialize in the main app component or entry file:
+In a typical Tauri app, create a shared SDK instance and initialize it early in the app lifecycle:
 
 ```typescript
 // src/lib/oasis.ts — shared instance
 import { initOasis } from "@oasis/sdk";
 
 export const oasis = initOasis({
-  apiKey: import.meta.env.VITE_OASIS_API_KEY,
+  apiKey: import.meta.env.VITE_OASIS_API_KEY,  // Use framework-appropriate env access
   serverUrl: import.meta.env.VITE_OASIS_SERVER_URL,
-  appVersion: __APP_VERSION__, // Injected at build time
+  appVersion: __APP_VERSION__, // Injected at build time via vite define
   enableAutoCrashReporting: true,
 });
 ```
@@ -256,10 +348,15 @@ This removes all global event listeners (error handlers, click tracking, console
 
 ```typescript
 // src/lib/oasis.ts
+// Use the env variable convention matching your framework:
+//   Vite:            import.meta.env.VITE_OASIS_API_KEY
+//   Next.js:         process.env.NEXT_PUBLIC_OASIS_API_KEY
+//   Create React App: process.env.REACT_APP_OASIS_API_KEY
+//   Nuxt 3:          useRuntimeConfig().public.oasisApiKey
 import { initOasis } from "@oasis/sdk";
 
 export const oasis = initOasis({
-  apiKey: import.meta.env.VITE_OASIS_API_KEY,
+  apiKey: import.meta.env.VITE_OASIS_API_KEY,       // Example: Vite
   serverUrl: import.meta.env.VITE_OASIS_SERVER_URL,
   appVersion: "1.0.0",
   enableAutoCrashReporting: true,
