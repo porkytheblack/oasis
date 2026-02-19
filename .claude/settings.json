@@ -1,8 +1,8 @@
 {
   "skills": {
-    "oasis-integration": {
+    "oasis-setup": {
       "description": "Guide for integrating Oasis into Tauri apps - covers SDK setup, workflow configuration, Tauri config, feedback collection, and crash reporting",
-      "path": "./skills/oasis-integration.md"
+      "path": "./skills/oasis-setup"
     }
   }
 }

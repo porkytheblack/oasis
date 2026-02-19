@@ -4,7 +4,7 @@ Help the user integrate Oasis into their Tauri application.
 
 ## Instructions
 
-Read the full integration guide at `.claude/skills/oasis-integration.md` and help the user with:
+Read the full integration guide at `integration-guide.md` (in this skill directory) and help the user with:
 
 1. **SDK Installation & Setup**
    - Install `oasis-sdk` package
@@ -29,7 +29,7 @@ Read the full integration guide at `.claude/skills/oasis-integration.md` and hel
 
 ## Key Files to Reference
 
-- SDK guide: `.claude/skills/oasis-integration.md`
+- Integration guide: `integration-guide.md` (in this skill directory)
 - Reusable workflow: `.github/workflows/tauri-release.yml`
 - SDK source: `sdk/src/index.ts`
 - SDK types: `sdk/src/types.ts`
