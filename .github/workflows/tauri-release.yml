@@ -280,7 +280,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          ARTIFACTS_DIR="../${{ inputs.artifacts_dir }}"
+          ARTIFACTS_DIR="${{ github.workspace }}/${{ inputs.artifacts_dir }}"
           mkdir -p "$ARTIFACTS_DIR/installers"
           mkdir -p "$ARTIFACTS_DIR/updates"
 
@@ -352,7 +352,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          ARTIFACTS_DIR="../${{ inputs.artifacts_dir }}"
+          ARTIFACTS_DIR="${{ github.workspace }}/${{ inputs.artifacts_dir }}"
           mkdir -p "$ARTIFACTS_DIR/installers"
           mkdir -p "$ARTIFACTS_DIR/updates"
 
@@ -414,7 +414,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          $artifactsDir = "../${{ inputs.artifacts_dir }}"
+          $artifactsDir = "${{ github.workspace }}/${{ inputs.artifacts_dir }}"
           New-Item -ItemType Directory -Force -Path "$artifactsDir/installers"
           New-Item -ItemType Directory -Force -Path "$artifactsDir/updates"
 
